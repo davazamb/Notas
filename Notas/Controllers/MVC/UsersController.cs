@@ -95,11 +95,14 @@ namespace Notas.Controllers
                 return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
             }
             User user = db.Users.Find(id);
+
             if (user == null)
             {
                 return HttpNotFound();
             }
-            return View(user);
+
+            var view = new UserView { User = user };
+            return View(view);
         }
 
         // POST: Users/Edit/5
@@ -107,15 +110,45 @@ namespace Notas.Controllers
         // más información vea http://go.microsoft.com/fwlink/?LinkId=317598.
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Edit([Bind(Include = "UserId,UserName,FirstName,LastName,Phone,Address,Photo,IsStudent,IsTeacher")] User user)
+        public ActionResult Edit(UserView view)
         {
             if (ModelState.IsValid)
             {
-                db.Entry(user).State = EntityState.Modified;
-                db.SaveChanges();
+                var db2 = new NotasContext();
+                var oldUser = db2.Users.Find(view.User.UserId);
+                db2.Dispose();
+
+                if (view.Photo != null)
+                {
+                    var pic = Utilities.UploadPhoto(view.Photo);
+                    if (!string.IsNullOrEmpty(pic))
+                    {
+                        view.User.Photo = string.Format("~/Content/Photos/{0}", pic);
+                    }
+
+                }else
+                {
+                    view.User.Photo = oldUser.Photo;
+                }
+                
+                db.Entry(view.User).State = EntityState.Modified;
+                
+                try
+                {
+                    db.SaveChanges();
+                    if(oldUser!= null && oldUser.UserName != view.User.UserName)
+                    {
+                        Utilities.ChangeEmailUserASP(oldUser.UserName, view.User.UserName);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    ModelState.AddModelError(string.Empty, ex.Message);
+                    return View(view);
+                }
                 return RedirectToAction("Index");
             }
-            return View(user);
+            return View(view);
         }
 
         // GET: Users/Delete/5

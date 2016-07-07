@@ -12,6 +12,7 @@ using Notas.Models;
 using Newtonsoft.Json.Linq;
 using Microsoft.AspNet.Identity;
 using Microsoft.AspNet.Identity.EntityFramework;
+using Notas.Clases;
 
 namespace Notas.Controllers.API
 {
@@ -93,12 +94,19 @@ namespace Notas.Controllers.API
             {
                 return BadRequest();
             }
+            var db2 = new NotasContext();
+            var oldUser = db2.Users.Find(id);
+            db2.Dispose();
 
             db.Entry(user).State = EntityState.Modified;
 
             try
             {
                 db.SaveChanges();
+                if (oldUser != null && oldUser.UserName != user.UserName)
+                {
+                    Utilities.ChangeEmailUserASP(oldUser.UserName, user.UserName);
+                }
             }
             catch (DbUpdateConcurrencyException)
             {
@@ -112,22 +120,43 @@ namespace Notas.Controllers.API
                 }
             }
 
-            return StatusCode(HttpStatusCode.NoContent);
+            return this.Ok(user);
         }
 
         // POST: api/Users
         [ResponseType(typeof(User))]
-        public IHttpActionResult PostUser(User user)
+        public IHttpActionResult PostUser(UserPassword userPassword)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
+            var user = new User
+            {
+                Address = userPassword.Address,
+                FirstName = userPassword.FirstName,
+                IsStudent = true,
+                IsTeacher = false,
+                LastName = userPassword.LastName,
+                Phone = userPassword.Phone,
+                UserName = userPassword.UserName,
+            };
 
-            db.Users.Add(user);
-            db.SaveChanges();
+            try
+            {               
+                db.Users.Add(user);
+                db.SaveChanges();
+                Utilities.CreateUserASP(userPassword.UserName, "Student", userPassword.Password);
+            }
+            catch (Exception ex)
+            {
+                return this.BadRequest(ex.Message);
+            }
 
-            return CreatedAtRoute("DefaultApi", new { id = user.UserId }, user);
+            userPassword.UserId = user.UserId;
+            userPassword.IsStudent = true;
+            userPassword.IsTeacher = false;
+            return this.Ok(userPassword);
         }
 
         // DELETE: api/Users/5

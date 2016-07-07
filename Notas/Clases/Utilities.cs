@@ -55,6 +55,20 @@ namespace Notas.Clases
 
             userManager.Create(userASP, email);
         }
+        //Nuevo CreateUser Cambiar correo de usuario
+        public static void ChangeEmailUserASP(string oldEmail, string newEmail)
+        {
+            var userManager = new UserManager<ApplicationUser>(new UserStore<ApplicationUser>(userContext));
+            var userASP = userManager.FindByEmail(oldEmail);
+            if (userASP == null)
+            {
+                return;
+            }
+            userASP.UserName = newEmail;
+            userASP.Email = newEmail;
+            userManager.Update(userASP);
+
+        }
         //Crea el usuario por email y role
         public static void CreateUserASP(string email, string roleName)
         {

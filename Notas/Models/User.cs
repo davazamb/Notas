@@ -46,10 +46,10 @@ namespace Notas.Models
         [DataType(DataType.ImageUrl)]
         public string Photo { get; set; }
 
-        [Display(Name = "Es Estudante")]
+        [Display(Name = "Estudiante")]
         public bool IsStudent { get; set; }
 
-        [Display(Name = "Es Profesor")]
+        [Display(Name = "Profesor")]
         public bool IsTeacher { get; set; }
 
     }
