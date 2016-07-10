@@ -25,8 +25,8 @@ namespace Notas.Controllers.API
         [Route("Login")]
         public IHttpActionResult Longin(JObject form)
         {
-            string email = string.Empty;
-            string password = string.Empty;
+            var email = string.Empty;
+            var password = string.Empty;
             dynamic jsonObject = form;
 
             try
@@ -79,6 +79,49 @@ namespace Notas.Controllers.API
             }
 
             return Ok(user);
+        }
+        //Cambiar el Password API
+        [HttpPut]
+        [Route("ChangePassword")]
+        public IHttpActionResult ChangePassword(JObject form)
+        {
+            var userName = string.Empty;
+            var oldPassword = string.Empty;
+            var newPassword = string.Empty;
+            dynamic jsonObject = form;
+
+            try
+            {
+                userName = jsonObject.UserName.Value;
+                oldPassword = jsonObject.OldPassword.Value;
+                newPassword = jsonObject.NewPassword.Value;
+            }
+            catch
+            {
+                return this.BadRequest("Incorrect call");
+            }
+            var userContext = new ApplicationDbContext();
+            var userManager = new UserManager<ApplicationUser>(new UserStore<ApplicationUser>(userContext));
+            var userASP = userManager.Find(userName, oldPassword);
+
+            if (userASP == null)
+            {
+                return this.BadRequest("Usuario y Password incorrecto");
+            }
+
+            var response = userManager.ChangePassword(userASP.Id, oldPassword, newPassword);
+
+            if (response.Succeeded)
+            {
+                return this.Ok<object>(new
+                {
+                    Message = "El password ha sido cambiado exitosamente"
+                });             
+            }
+            else
+            {
+                return this.BadRequest(response.Errors.ToString());
+            }
         }
 
         // PUT: api/Users/5

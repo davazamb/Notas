@@ -11,6 +11,7 @@ using Notas.Clases;
 
 namespace Notas.Controllers
 {
+    [Authorize(Roles = "Admin")]
     public class UsersController : Controller
     {
         private NotasContext db = new NotasContext();

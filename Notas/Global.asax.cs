@@ -19,6 +19,7 @@ namespace Notas
         {
             Database.SetInitializer(new MigrateDatabaseToLatestVersion<NotasContext, Configuration>());
             this.CheckRoles();
+            Utilities.CheckSuperUser("Admin");
             AreaRegistration.RegisterAllAreas();
             GlobalConfiguration.Configure(WebApiConfig.Register);
             FilterConfig.RegisterGlobalFilters(GlobalFilters.Filters);
