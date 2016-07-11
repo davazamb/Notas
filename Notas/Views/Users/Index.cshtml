@@ -7,7 +7,7 @@
 <h2>Usuarios</h2>
 
 <p>
-    @Html.ActionLink("Create New", "Create", new { }, new { @class = "btn btn-primary" })
+    @Html.ActionLink("Crear Nuevo", "Create", new { }, new { @class = "btn btn-primary" })
 </p>
 <table class="table">
     <tr>
@@ -62,9 +62,9 @@
             @Html.DisplayFor(modelItem => item.IsTeacher)
         </td>
         <td>
-            @Html.ActionLink("Edit", "Edit", new { id=item.UserId }, new { @class = "btn btn-warning" }) |
-            @Html.ActionLink("Details", "Details", new { id=item.UserId }, new { @class = "btn btn-info" }) |
-            @Html.ActionLink("Delete", "Delete", new { id=item.UserId }, new { @class = "btn btn-danger" })
+            @Html.ActionLink("Editar", "Edit", new { id=item.UserId }, new { @class = "btn btn-warning" }) |
+            @Html.ActionLink("Detalles", "Details", new { id=item.UserId }, new { @class = "btn btn-info" }) |
+            @Html.ActionLink("Borrar", "Delete", new { id=item.UserId }, new { @class = "btn btn-danger" })
         </td>
     </tr>
 }

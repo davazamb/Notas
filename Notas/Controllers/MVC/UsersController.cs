@@ -29,7 +29,8 @@ namespace Notas.Controllers
             {
                 return new HttpStatusCodeResult(HttpStatusCode.BadRequest);
             }
-            User user = db.Users.Find(id);
+            var user = db.Users.Find(id);
+
             if (user == null)
             {
                 return HttpNotFound();

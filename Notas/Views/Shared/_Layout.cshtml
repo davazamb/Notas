@@ -25,7 +25,7 @@
             </div>
             <div class="navbar-collapse collapse">
                 <ul class="nav navbar-nav">
-                    <li>@Html.ActionLink("Inicio", "Index", "Home")</li>
+                    @*<li>@Html.ActionLink("Inicio", "Index", "Home")</li>*@
                     <li>@Html.ActionLink("Acerca de", "About", "Home")</li>
                     <li>@Html.ActionLink("Contactenos", "Contact", "Home")</li>   
                     @if(this.User.IsInRole("Admin"))
@@ -34,6 +34,7 @@
                         <a href="#" class="dropdown-toggle" data-toggle="dropdown">Administrador<b class="caret"></b></a>
                         <ul class="dropdown-menu">
                             <li>@Html.ActionLink("Usuarios", "Index", "Users")</li>
+                            <li>@Html.ActionLink("Grupos", "Index", "Groups")</li>
                         </ul>
                     </li>
                     }

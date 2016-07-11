@@ -1,0 +1,110 @@
+﻿@model Notas.Models.Group
+
+@{
+    ViewBag.Title = "Detalles";
+}
+
+<h2>Detalles</h2>
+
+<div class="row">
+    <div class="col-md-6">
+        <div>
+            <h4>Grupo</h4>
+            <hr />
+            <dl class="dl-horizontal">
+                <dt>
+                    Profesor
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.User.FullName)
+                </dd>
+
+                <dt>
+                    @Html.DisplayNameFor(model => model.Description)
+                </dt>
+
+                <dd>
+                    @Html.DisplayFor(model => model.Description)
+                </dd>
+
+            </dl>
+        </div>
+        <hr />
+                <p>
+                    @Html.ActionLink("Edit", "Edit", new { id = Model.GroupId }, new { @class = "btn btn-primary" }) |
+                    @Html.ActionLink("Adicionar Estudiante", "AddStudent", new { id = Model.GroupId }, new { @class = "btn btn-warning" }) |
+                    @Html.ActionLink("Regresar", "Index", new { }, new { @class = "btn btn-success" })
+                </p>
+            
+
+    </div>
+    <div class="col-md-6">
+        <h4>@Html.DisplayFor(model => model.User.FullName)</h4>
+        <hr />
+        @if (!string.IsNullOrEmpty(Model.User.Photo))
+        {
+            <img src="@Url.Content(Model.User.Photo)" alt="Image" style="width:120px;height:120px;max-width:100%; height:auto;" />
+        }
+    </div>
+</div>
+
+
+
+
+<h4>Estudiantes</h4>
+@if (Model.GroupDetails.Count == 0)
+{
+    <h5>No hay estudiantes matriculados para este grupo</h5>
+}
+else
+{
+    <table class="table">
+        <tr>
+            <th>
+                @Html.DisplayNameFor(model => model.GroupDetails.FirstOrDefault().User.UserName)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.GroupDetails.FirstOrDefault().User.FullName)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.GroupDetails.FirstOrDefault().User.Phone)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.GroupDetails.FirstOrDefault().User.Address)
+            </th>
+            <th>
+                @Html.DisplayNameFor(model => model.GroupDetails.FirstOrDefault().User.Photo)
+            </th>
+            <th></th>
+        </tr>
+
+        @foreach (var item in Model.GroupDetails)
+        {
+            <tr>
+                <td>
+                    @Html.DisplayFor(modelItem => item.User.UserName)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.User.FullName)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.User.Phone)
+                </td>
+                <td>
+                    @Html.DisplayFor(modelItem => item.User.Address)
+                </td>
+                <td>
+                    @if (!string.IsNullOrEmpty(item.User.Photo))
+                    {
+                        <img src="@Url.Content(item.User.Photo)" alt="Image" style="width:100px;height:100px;max-width:100%; height:auto;" />
+                    }
+                </td>
+                <td>
+                    @Html.ActionLink("Borrar", "DeleteStudent", new { id = item.GroupDetailId }, new { @class = "btn btn-danger", onclick = "return confirm('¿Está seguro de quitar este estudiante del grupo?')" })
+                </td>
+            </tr>
+        }
+
+    </table>
+}

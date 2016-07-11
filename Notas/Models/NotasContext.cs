@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data.Entity;
+using System.Data.Entity.ModelConfiguration.Conventions;
 using System.Linq;
 using System.Web;
 
@@ -12,6 +13,11 @@ namespace Notas.Models
         { 
 
         }
+        protected override void OnModelCreating(DbModelBuilder modelBuilder)
+        {
+            modelBuilder.Conventions.Remove<OneToManyCascadeDeleteConvention>();
+        }
+
 
         protected override void Dispose(bool disposing)
         {
@@ -19,6 +25,10 @@ namespace Notas.Models
 
         }
 
-        public System.Data.Entity.DbSet<Notas.Models.User> Users { get; set; }
-    }
+        public DbSet<User> Users { get; set; }
+
+        public DbSet<Group> Groups { get; set; }
+
+        public DbSet<GroupDetail> GroupDetails { get; set; }
+        }
 }

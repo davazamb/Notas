@@ -63,9 +63,10 @@ namespace Notas.Controllers.API
 
 
         // GET: api/Users
-        public IQueryable<User> GetUsers()
+        public List<User> GetUsers()
         {
-            return db.Users;
+            var users = db.Users.ToList();            
+            return users;
         }
 
         // GET: api/Users/5

@@ -178,8 +178,10 @@
     <Compile Include="App_Start\Startup.Auth.cs" />
     <Compile Include="App_Start\WebApiConfig.cs" />
     <Compile Include="Clases\Utilities.cs" />
+    <Compile Include="Controllers\API\GroupsController.cs" />
     <Compile Include="Controllers\API\UsersController.cs" />
     <Compile Include="Controllers\MVC\AccountController.cs" />
+    <Compile Include="Controllers\MVC\GroupsController.cs" />
     <Compile Include="Controllers\MVC\HomeController.cs" />
     <Compile Include="Controllers\MVC\ManageController.cs" />
     <Compile Include="Controllers\MVC\UsersController.cs" />
@@ -188,6 +190,8 @@
     </Compile>
     <Compile Include="Migrations\Configuration.cs" />
     <Compile Include="Models\AccountViewModels.cs" />
+    <Compile Include="Models\Group.cs" />
+    <Compile Include="Models\GroupDetail.cs" />
     <Compile Include="Models\IdentityModels.cs" />
     <Compile Include="Models\ManageViewModels.cs" />
     <Compile Include="Models\NotasContext.cs" />
@@ -260,6 +264,12 @@
     <Content Include="Views\Users\Details.cshtml" />
     <Content Include="Views\Users\Edit.cshtml" />
     <Content Include="Views\Users\Index.cshtml" />
+    <Content Include="Views\Groups\Create.cshtml" />
+    <Content Include="Views\Groups\Delete.cshtml" />
+    <Content Include="Views\Groups\Details.cshtml" />
+    <Content Include="Views\Groups\Edit.cshtml" />
+    <Content Include="Views\Groups\Index.cshtml" />
+    <Content Include="Views\Groups\AddStudent.cshtml" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="App_Data\" />
