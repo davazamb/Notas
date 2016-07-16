@@ -10,6 +10,7 @@ using System.Web.Http;
 using System.Web.Http.Description;
 using Notas.Models;
 using Newtonsoft.Json.Linq;
+using Newtonsoft.Json;
 
 namespace Notas.Controllers.API
 {
@@ -22,19 +23,7 @@ namespace Notas.Controllers.API
         [Route("SaveNotes")]
         public IHttpActionResult SaveNotes(JObject form)
         {
-            var email = string.Empty;
-            var password = string.Empty;
-            dynamic jsonObject = form;
-
-            try
-            {
-                email = jsonObject.Email.Value;
-                password = jsonObject.Password.Value;
-            }
-            catch
-            {
-                return this.BadRequest("Incorrect call");
-            }
+            var myStudentsResponse = JsonConvert.DeserializeObject<MyStudentsResponse>(form.ToString());            
             return Ok(true);
         }
 
