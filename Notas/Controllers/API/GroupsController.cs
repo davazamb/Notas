@@ -22,10 +22,16 @@ namespace Notas.Controllers.API
         {
             var groups = db.Groups.Where(g => g.UserId == userId).ToList();
             var subjects = db.GroupDetails.Where(gd => gd.UserId == userId).ToList();
-            var matters = new List<Group>();
+            var matters = new List<object>();
             foreach (var subject in subjects)
             {
-                matters.Add(db.Groups.Find(subject.GroupId));
+                var teacher = db.Users.Find(subject.Group.UserId);
+                matters.Add(new
+                {
+                    GroupId = subject.GroupId,
+                    Description = subject.Group.Description,
+                    teacher = teacher,
+                });
             }
 
             var response = new

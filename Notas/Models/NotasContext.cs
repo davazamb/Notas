@@ -30,5 +30,6 @@ namespace Notas.Models
         public DbSet<Group> Groups { get; set; }
 
         public DbSet<GroupDetail> GroupDetails { get; set; }
-        }
+        public DbSet<Note> Notes { get; set; }
+    }
 }
