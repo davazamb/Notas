@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Web.Http;
 using System.Web.Http.Description;
 using Notas.Models;
+using Newtonsoft.Json.Linq;
 
 namespace Notas.Controllers.API
 {
@@ -17,6 +18,46 @@ namespace Notas.Controllers.API
     {
         private NotasContext db = new NotasContext();
 
+        [HttpPost]
+        [Route("SaveNotes")]
+        public IHttpActionResult SaveNotes(JObject form)
+        {
+            var email = string.Empty;
+            var password = string.Empty;
+            dynamic jsonObject = form;
+
+            try
+            {
+                email = jsonObject.Email.Value;
+                password = jsonObject.Password.Value;
+            }
+            catch
+            {
+                return this.BadRequest("Incorrect call");
+            }
+            return Ok(true);
+        }
+
+        [HttpGet]
+        [Route("GetStudents/{groupId}")]
+        public IHttpActionResult GetStudents(int groupId)
+        {
+            var students = db.GroupDetails.Where(gd => gd.GroupId == groupId).ToList();
+            var myStudents = new List<object>();
+            foreach (var student in students)
+            {
+                var myStudent = db.Users.Find(student.UserId);
+                myStudents.Add(new
+                {
+                    GroupDetailId = student.GroupDetailId,
+                    GroupId = student.GroupId,
+                    Student = myStudent,
+                });
+            }
+            return Ok(myStudents);
+        }
+
+        [HttpGet]
         [Route("GetGroups/{userId}")]
         public IHttpActionResult GetGroups(int userId)
         {
@@ -42,14 +83,16 @@ namespace Notas.Controllers.API
             return Ok(response);
         }
 
-
+        
         // GET: api/Groups
+        [HttpGet]
         public IQueryable<Group> GetGroups()
         {
             return db.Groups;
         }
 
         // GET: api/Groups/5
+        [HttpGet]
         [ResponseType(typeof(Group))]
         public IHttpActionResult GetGroup(int id)
         {
@@ -63,6 +106,7 @@ namespace Notas.Controllers.API
         }
 
         // PUT: api/Groups/5
+        [HttpPut]
         [ResponseType(typeof(void))]
         public IHttpActionResult PutGroup(int id, Group group)
         {
@@ -98,6 +142,7 @@ namespace Notas.Controllers.API
         }
 
         // POST: api/Groups
+        [HttpPost]
         [ResponseType(typeof(Group))]
         public IHttpActionResult PostGroup(Group group)
         {
@@ -113,6 +158,7 @@ namespace Notas.Controllers.API
         }
 
         // DELETE: api/Groups/5
+        [HttpDelete]
         [ResponseType(typeof(Group))]
         public IHttpActionResult DeleteGroup(int id)
         {
