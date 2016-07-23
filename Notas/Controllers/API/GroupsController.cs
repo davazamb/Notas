@@ -19,12 +19,145 @@ namespace Notas.Controllers.API
     {
         private NotasContext db = new NotasContext();
 
+        //PAra Mostrar en la vista de notas en el profesor
+        [HttpGet]
+        [Route("GetNotesGroup/{groupId}")]
+        public IHttpActionResult GetNotesGroup(int groupId)
+        {
+            var group = db.Groups.Find(groupId);
+
+            if(group == null)
+            {
+                return BadRequest("El grupo no existe");
+            }
+            var students = new List<object>();
+
+            foreach (var groupDetails in group.GroupDetails)
+            {
+                var notes = db.GroupDetails.Where(gd => gd.GroupId == groupId && gd.UserId == groupDetails.UserId).ToList();
+                var noteDef = 0.0;
+
+                foreach (var note in notes)
+                {
+                    foreach (var notes2 in note.Notes)
+                    {
+                        noteDef += notes2.Percentage * notes2.Qualification;
+
+                    }
+                }
+                students.Add(new
+                {
+                    Student = groupDetails.User,
+                    Note = noteDef,
+                });
+            }
+
+            return Ok(students);
+        }
+
+        //Detalle de las notas de un estudiante de una materia
+        [HttpGet]
+        [Route("GetNoteDetail/{groupId}/{userId}")]
+        public IHttpActionResult GetNoteDetail(int groupId, int userId)
+        {
+            //var notes = db.GroupDetails.Where(gd => gd.GroupId == groupId && gd.UserId == userId).ToList();
+            //var myNotes = new List<object>();
+
+            //foreach (var note in notes)
+            //{
+            //    var myNote = db.Notes.Find(note.UserId);
+            //    myNotes.Add(new
+            //    {
+            //        GroupDetailId = note.GroupDetailId,
+            //        Percentage = myNote,
+            //        Qualification = myNote,
+            //    });
+            //}
+            //return Ok(myNotes);
+            var group = db.Groups.Find(groupId);
+
+            if (group == null)
+            {
+                return BadRequest("El grupo no existe");
+            }
+            var myNotes = new List<object>();
+
+            foreach (var groupDetails in group.GroupDetails)
+            {
+                var notes = db.GroupDetails.Where(gd => gd.GroupId == groupId && gd.UserId == groupDetails.UserId).ToList();
+                var noteDef = 0.0;
+
+                foreach (var note in notes)
+                {
+                    foreach (var notes2 in note.Notes)
+                    {
+                        noteDef += notes2.Percentage * notes2.Qualification;
+
+                    }
+                }
+                myNotes.Add(new
+                {                   
+                    myNote = groupDetails.Notes,
+                    Note = noteDef,
+                });
+            }
+
+            return Ok(myNotes);
+        }
+
+
+
+        [HttpGet]
+        [Route("GetNote/{groupId}/{userId}")]
+        public IHttpActionResult GetNote(int groupId, int userId)
+        {
+            var noteDef = 0.0;
+            var notes = db.GroupDetails.Where(gd => gd.GroupId == groupId && gd.UserId == userId).ToList();
+
+            foreach (var note in notes)
+            {
+                foreach (var notes2 in note.Notes)
+                {
+                    noteDef += notes2.Percentage * notes2.Qualification;
+                }
+            }
+
+            return this.Ok<object>(new
+            {
+                Note = noteDef,
+            });
+        }
+
         [HttpPost]
         [Route("SaveNotes")]
         public IHttpActionResult SaveNotes(JObject form)
         {
-            var myStudentsResponse = JsonConvert.DeserializeObject<MyStudentsResponse>(form.ToString());            
-            return Ok(true);
+            var myStudentsResponse = JsonConvert.DeserializeObject<MyStudentsResponse>(form.ToString());          
+            using(var transaction = db.Database.BeginTransaction())
+            {
+                try
+                {
+                    foreach (var student in myStudentsResponse.Students)
+                    {
+                        var note = new Note
+                        {
+                            GroupDetailId = student.GroupDetailId,
+                            Percentage = (float)myStudentsResponse.Percentage,
+                            Qualification = (float)student.Note,
+                        };
+                        db.Notes.Add(note);
+                    }
+                    db.SaveChanges();
+                    transaction.Commit();
+                    return Ok(true);
+
+                }
+                catch (Exception ex)
+                {
+                    transaction.Rollback();
+                    return BadRequest(ex.Message);
+                }
+            }  
         }
 
         [HttpGet]
