@@ -1,0 +1,143 @@
+Aquí tienes un ejemplo de cómo crear un servicio de Windows en .NET Core 8 que utiliza Quartz.NET para realizar una purga diaria en una tabla, conservando los últimos 3 meses y moviendo los registros purgados a una tabla de historial utilizando LINQ:
+
+---
+
+### Pasos para implementar
+
+#### 1. **Crear el proyecto del servicio**
+Utiliza la plantilla de `Worker Service`:
+```bash
+dotnet new worker -n PurgaTablaQuartzService
+```
+
+---
+
+#### 2. **Agregar las dependencias necesarias**
+Añade las siguientes bibliotecas para trabajar con Quartz.NET y Entity Framework Core:
+```bash
+dotnet add package Quartz
+dotnet add package Microsoft.EntityFrameworkCore
+dotnet add package Microsoft.EntityFrameworkCore.SqlServer
+```
+
+---
+
+#### 3. **Configurar el contexto de EF Core**
+Define el contexto y las clases para las tablas de la base de datos:
+```csharp
+using Microsoft.EntityFrameworkCore;
+
+public class AppDbContext : DbContext
+{
+    public DbSet<Registro> TablaPrincipal { get; set; }
+    public DbSet<Registro> TablaHistorial { get; set; }
+
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        optionsBuilder.UseSqlServer("TuCadenaDeConexionSQLServer");
+    }
+}
+
+public class Registro
+{
+    public int Id { get; set; }
+    public DateTime FechaCreacion { get; set; }
+    public string Datos { get; set; }
+}
+```
+
+---
+
+#### 4. **Definir el trabajo de Quartz**
+Crea una clase para la tarea de purga:
+```csharp
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+
+public class PurgaTablaJob : IJob
+{
+    private readonly AppDbContext _context;
+
+    public PurgaTablaJob(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task Execute(IJobExecutionContext context)
+    {
+        var fechaLimite = DateTime.Now.AddMonths(-3);
+
+        // Obtener registros a purgar
+        var registrosAPurgar = _context.TablaPrincipal
+            .Where(r => r.FechaCreacion < fechaLimite)
+            .ToList();
+
+        if (registrosAPurgar.Any())
+        {
+            // Mover a TablaHistorial
+            _context.TablaHistorial.AddRange(registrosAPurgar);
+
+            // Eliminar de TablaPrincipal
+            _context.TablaPrincipal.RemoveRange(registrosAPurgar);
+
+            // Guardar cambios en la base de datos
+            await _context.SaveChangesAsync();
+        }
+    }
+}
+```
+
+---
+
+#### 5. **Configurar Quartz en el servicio**
+En el archivo `Program.cs`, configura Quartz para programar el trabajo con una expresión cron diaria:
+```csharp
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Quartz;
+using Quartz.Impl;
+using Quartz.Spi;
+
+public class Program
+{
+    public static void Main(string[] args)
+    {
+        Host.CreateDefaultBuilder(args)
+            .ConfigureServices((hostContext, services) =>
+            {
+                services.AddDbContext<AppDbContext>();
+
+                // Configuración de Quartz
+                services.AddQuartz(q =>
+                {
+                    q.UseMicrosoftDependencyInjectionJobFactory();
+
+                    // Configurar el trabajo y cron
+                    var jobKey = new JobKey("PurgaTablaJob");
+                    q.AddJob<PurgaTablaJob>(opts => opts.WithIdentity(jobKey));
+                    q.AddTrigger(opts => opts
+                        .ForJob(jobKey)
+                        .WithIdentity("PurgaTablaTrigger")
+                        .WithCronSchedule("0 0 0 * * ?")); // Ejecución diaria a medianoche
+                });
+
+                services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
+            })
+            .Build()
+            .Run();
+    }
+}
+```
+
+---
+
+#### 6. **Registrar el servicio en Windows**
+Compila el proyecto y registra el servicio utilizando `sc.exe`:
+```bash
+sc create PurgaTablaQuartzService binPath= "C:\Ruta\PurgaTablaQuartzService.exe"
+```
+
+---
+
+Con estos pasos, tienes un servicio funcional que ejecuta la purga diaria de manera automatizada utilizando Quartz.NET y LINQ. ¿Hay algo específico que te gustaría ajustar o mejorar en esta implementación? 🚀
