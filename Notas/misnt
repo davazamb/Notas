@@ -1,0 +1,22 @@
+using System;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+
+public class ImageProcessor
+{
+    public static MemoryStream RotateBase64Image(string base64String, float angle)
+    {
+        using (MemoryStream inputStream = Base64ToMemoryStream(base64String))
+        using (Image image = Image.FromStream(inputStream)) // Cargar imagen desde el stream
+        {
+            image.RotateFlip(RotateFlipType.Rotate270FlipNone); // Rotar la imagen 270 grados
+
+            MemoryStream outputStream = new MemoryStream();
+            image.Save(outputStream, ImageFormat.Png); // Guardar imagen en memoria
+            outputStream.Position = 0; // Reiniciar posición para lectura
+
+            return outputStream;
+        }
+    }
+}
