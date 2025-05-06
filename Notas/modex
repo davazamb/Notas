@@ -1,0 +1,83 @@
+
+
+### 1. **Preparar el backend en .NET Core**
+Si estás trabajando con un DataTable en el backend, puedes exponer los detalles de un elemento a través de una API en un controlador:
+
+```csharp
+[ApiController]
+[Route("api/[controller]")]
+public class DatosController : ControllerBase
+{
+    private readonly List<DatosModel> _datos = new()
+    {
+        new DatosModel { Id = 1, Nombre = "Ejemplo 1", Descripcion = "Descripción 1" },
+        new DatosModel { Id = 2, Nombre = "Ejemplo 2", Descripcion = "Descripción 2" }
+    };
+
+    [HttpGet("{id}")]
+    public IActionResult GetDetalle(int id)
+    {
+        var detalle = _datos.FirstOrDefault(d => d.Id == id);
+        if (detalle == null) return NotFound();
+        return Ok(detalle);
+    }
+}
+```
+
+### 2. **Crear la ventana modal en el frontend**
+Si estás usando Razor Pages o Blazor, puedes crear una ventana modal usando HTML y JavaScript.
+
+```html
+<!-- Modal -->
+<div id="detalleModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h2 id="modalTitle"></h2>
+        <p id="modalDescription"></p>
+    </div>
+</div>
+```
+
+### 3. **Cargar los detalles con JavaScript**
+Para obtener los datos del backend y mostrarlos en la ventana modal:
+
+```javascript
+function cargarDetalle(id) {
+    fetch(`/api/Datos/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById("modalTitle").innerText = data.nombre;
+            document.getElementById("modalDescription").innerText = data.descripcion;
+            document.getElementById("detalleModal").style.display = "block";
+        })
+        .catch(error => console.error("Error al obtener los detalles:", error));
+}
+
+document.querySelector(".close").addEventListener("click", () => {
+    document.getElementById("detalleModal").style.display = "none";
+});
+```
+
+### 4. **Integración con DataTable**
+Si estás usando una tabla con datos, puedes agregar un botón en cada fila para abrir el modal:
+
+```html
+<table>
+    <tr>
+        <th>ID</th>
+        <th>Nombre</th>
+        <th>Acción</th>
+    </tr>
+    <tr>
+        <td>1</td>
+        <td>Ejemplo 1</td>
+        <td><button onclick="cargarDetalle(1)">Ver Detalles</button></td>
+    </tr>
+    <tr>
+        <td>2</td>
+        <td>Ejemplo 2</td>
+        <td><button onclick="cargarDetalle(2)">Ver Detalles</button></td>
+    </tr>
+</table>
+```
+
