@@ -1,0 +1,78 @@
+Para validar la pérdida de sesión en una aplicación web desarrollada en .NET Framework con JavaScript y que usa inicio de sesión SSO, puedes seguir estos enfoques:
+
+### 1. **Detectar la Expiración de Sesión en el Backend**
+En .NET Framework, puedes verificar si la sesión ha expirado en cada solicitud de usuario. Si utilizas autenticación basada en cookies o tokens, puedes configurar un middleware o un filtro en ASP.NET que detecte sesiones caducadas.
+
+Ejemplo con `Global.asax`:
+```csharp
+protected void Session_Start(object sender, EventArgs e)
+{
+    if (HttpContext.Current.User.Identity.IsAuthenticated)
+    {
+        // Validar si la sesión aún es válida con SSO
+    }
+    else
+    {
+        // Redirigir a la página de login
+        Response.Redirect("/Login");
+    }
+}
+```
+
+### 2. **Validar Sesión con JavaScript (Frontend)**
+Puedes hacer peticiones periódicas al servidor para validar si la sesión aún está activa. Por ejemplo, usar `fetch` o `XMLHttpRequest` para llamar a una API que verifique el estado de autenticación.
+
+Ejemplo con JavaScript:
+```javascript
+function verificarSesion() {
+    fetch('/api/verificar-sesion')
+        .then(response => response.json())
+        .then(data => {
+            if (!data.activa) {
+                alert("La sesión ha expirado, serás redirigido.");
+                window.location.href = "/Login";
+            }
+        })
+        .catch(error => console.error('Error validando sesión:', error));
+}
+
+// Verificar sesión cada 5 minutos
+setInterval(verificarSesion, 300000);
+```
+
+### 3. **Uso de Cookies o Token**
+Si la autenticación en SSO se basa en tokens, puedes verificar si el token aún es válido antes de cada acción importante del usuario.
+
+Ejemplo para extraer un token desde `localStorage`:
+```javascript
+const token = localStorage.getItem("authToken");
+
+if (!token) {
+    window.location.href = "/Login";
+}
+```
+
+### 4. **Manejo de Eventos de Usuario**
+Puedes detectar inactividad y cerrar la sesión automáticamente. Para esto, puedes usar eventos de JavaScript como `mousemove`, `keydown` y `click`, reiniciando un temporizador cuando el usuario interactúa.
+
+Ejemplo:
+```javascript
+let timeout;
+
+function iniciarTemporizador() {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => {
+        alert("Sesión inactiva, cerrando sesión...");
+        window.location.href = "/Login";
+    }, 1800000); // 30 minutos
+}
+
+window.addEventListener('mousemove', iniciarTemporizador);
+window.addEventListener('keydown', iniciarTemporizador);
+window.addEventListener('click', iniciarTemporizador);
+```
+
+### **Conclusión**
+La mejor estrategia dependerá de cómo está implementado el SSO en tu aplicación. Si el login es gestionado por una API externa, podrías integrar comprobaciones automáticas a la autenticación con un _ping_ al servidor. Si es por cookies de autenticación, puedes verificar su expiración periódicamente.
+
+Si me das más detalles sobre cómo está configurado el login SSO en tu proyecto, puedo afinar aún más la recomendación para tu caso específico. ¿Cómo está implementado el inicio de sesión en tu aplicación?
