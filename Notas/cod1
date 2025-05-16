@@ -1,0 +1,12 @@
+var resultado = miListaDeDatos
+    .Where(m => m.ci_lote == 2) // Filtra por lote
+    .GroupBy(m => new { m.cl_id, m.ci_fi_source, m.fi_name, m.cl_count, m.cl_currency })
+    .Select(grupo => new
+    {
+        L = grupo.Key.cl_id,
+        BC = grupo.Key.ci_fi_source,
+        BN = grupo.Key.fi_name,
+        DOC = grupo.Key.cl_count,
+        Pen_amount = grupo.Key.cl_currency == "EU" ? grupo.Sum(m => m.ci_amount) : 0
+    })
+    .ToList();
