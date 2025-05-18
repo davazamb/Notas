@@ -54,3 +54,20 @@ var resultado = ListaClientes
         PenAmount = Listalote.Moneda == "EU" ? Listalote.Monto : 0
     })
     .ToList();
+
+
+var resultado = ListaClientes
+    .Join(ListaBancos,
+          cliente => cliente.CodigoBanco, 
+          banco => banco.Codigo,
+          (cliente, banco) => new { cliente, banco }) // Relacionamos Cliente con Banco
+    .Where(temp => temp.cliente.Id == Listalote.Id) // Filtramos por el lote actual
+    .Select(temp => new
+    {
+        L = Listalote.Id,
+        BC = Listalote.Fuente,
+        BN = temp.banco.NombreBanco, // Banco relacionado con el cliente
+        DOC = temp.cliente.CantidadDocs, // Documentos del cliente
+        PenAmount = Listalote.Moneda == "EU" ? Listalote.Monto : 0
+    })
+    .ToList();
