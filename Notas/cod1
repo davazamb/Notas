@@ -26,3 +26,17 @@ var resultado = ListaLotes
         PenAmount = lote.Moneda == "EU" ? lote.Monto : 0
     })
     .ToList();
+
+
+
+var resultado = ListaLotes
+    .Where(lote => Cliente != null && ListaBancos.Any(banco => banco.Codigo == lote.Codigo))
+    .Select(lote => new
+    {
+        L = lote.Id,
+        BC = lote.Fuente,
+        BN = ListaBancos.FirstOrDefault(banco => banco.Codigo == lote.Codigo)?.NombreBanco ?? "Desconocido",
+        DOC = Cliente.CantidadDocs, // Ahora accedemos directamente a Cliente
+        PenAmount = lote.Moneda == "EU" ? lote.Monto : 0
+    })
+    .ToList();
