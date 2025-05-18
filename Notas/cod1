@@ -10,3 +10,19 @@ var resultado = miListaDeDatos
         Pen_amount = grupo.Key.cl_currency == "EU" ? grupo.Sum(m => m.ci_amount) : 0
     })
     .ToList();
+
+
+
+
+var resultado = ListaLotes
+    .Where(lote => ListaClientes.Any(cliente => cliente.Id == lote.Id) &&
+                   ListaBancos.Any(banco => banco.Codigo == lote.Codigo))
+    .Select(lote => new
+    {
+        L = lote.Id,
+        BC = lote.Fuente,
+        BN = ListaBancos.FirstOrDefault(banco => banco.Codigo == lote.Codigo)?.NombreBanco ?? "Desconocido",
+        DOC = ListaClientes.FirstOrDefault(cliente => cliente.Id == lote.Id)?.CantidadDocs ?? 0,
+        PenAmount = lote.Moneda == "EU" ? lote.Monto : 0
+    })
+    .ToList();
