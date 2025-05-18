@@ -71,3 +71,17 @@ var resultado = ListaClientes
         PenAmount = Listalote.Moneda == "EU" ? Listalote.Monto : 0
     })
     .ToList();
+
+
+var resultado = ListaClientes
+    .Where(cliente => cliente.Id == Listalote.Id) // Filtra clientes relacionados con el lote
+    .GroupBy(cliente => ListaBancos.FirstOrDefault(banco => banco.Codigo == cliente.CodigoBanco)?.NombreBanco ?? "Desconocido") // Agrupa por banco
+    .Select(grupo => new
+    {
+        L = Listalote.Id,
+        BC = Listalote.Fuente,
+        BN = grupo.Key, // Nombre del banco
+        DOC = grupo.Count(), // Cantidad de clientes en el grupo
+        TotalMonto = grupo.Sum(cliente => cliente.Monto) // Suma los montos de los clientes agrupados
+    })
+    .ToList();
