@@ -1,0 +1,32 @@
+// Función para convertir Base64 a ArrayBuffer
+function base64ToArrayBuffer(base64) {
+    let binaryString = atob(base64);
+    let len = binaryString.length;
+    let bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+    }
+    return bytes.buffer;
+}
+
+// Función para convertir ArrayBuffer a Blob
+function arrayBufferToBlob(arrayBuffer, mimeType) {
+    return new Blob([arrayBuffer], { type: mimeType });
+}
+
+// Función para descargar el Blob como archivo
+function downloadBlob(blob, filename) {
+    let link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Ejemplo de uso
+const base64String = "U29tZSBzYW1wbGUgdGV4dA=="; // "Some sample text" en Base64
+const mimeType = "text/plain"; // Tipo de archivo
+const arrayBuffer = base64ToArrayBuffer(base64String);
+const blob = arrayBufferToBlob(arrayBuffer, mimeType);
+downloadBlob(blob, "archivo.txt");
