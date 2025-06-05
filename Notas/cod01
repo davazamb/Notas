@@ -1,0 +1,16 @@
+var resultado = tuTabla
+    .Where(t => t.Estado == "Rechazado")
+    .GroupBy(t => new { t.CodigoRechazo, t.Mensaje })
+    .Select(g => new 
+    {
+        CodigoRechazo = g.Key.CodigoRechazo,
+        Mensaje = g.Key.Mensaje,
+        Entidades = string.Join(", ", g.Select(t => t.Entidad).Distinct()),
+        Cuentas = string.Join(", ", g.Select(t => t.NumeroDeCuenta).Distinct()),
+        Monedas = string.Join(", ", g.Select(t => t.Moneda).Distinct()),
+        Montos = string.Join(", ", g.Select(t => t.Monto.ToString()).Distinct()),
+        NumeroDocumentos = g.Count(),
+        Fechas = string.Join(", ", g.Select(t => t.FechaValor.ToString("yyyy-MM-dd")).Distinct())
+    })
+    .OrderByDescending(g => g.CodigoRechazo)
+    .ToList();
