@@ -1,0 +1,103 @@
+
+
+### 1. **Definición de las Clases**
+Asegúrate de que los objetos de tu base de datos estén bien estructurados. Por ejemplo:
+
+```csharp
+public class Factura
+{
+    public int NumeroFactura { get; set; }
+    public DateTime Fecha { get; set; }
+    public decimal Monto { get; set; }
+    public string CodigoRechazo { get; set; }
+    public string MensajeRechazo { get; set; }
+    public int BancoId { get; set; }
+}
+
+public class Banco
+{
+    public int BancoId { get; set; }
+    public string NombreBanco { get; set; }
+}
+```
+
+### 2. **Consulta LINQ para Agrupar Datos**
+Aquí usamos LINQ para agrupar las facturas rechazadas por código y mensaje de rechazo, sumando el monto e incluyendo la comisión fija:
+
+```csharp
+public List<ReporteFacturas> GenerarReporte(List<Factura> facturas, decimal comisionFija)
+{
+    var reporte = facturas
+        .Where(f => !string.IsNullOrEmpty(f.CodigoRechazo)) // Filtrar rechazadas
+        .GroupBy(f => new { f.CodigoRechazo, f.MensajeRechazo }) // Agrupar por código y mensaje
+        .Select(grupo => new ReporteFacturas
+        {
+            CodigoRechazo = grupo.Key.CodigoRechazo,
+            MensajeRechazo = grupo.Key.MensajeRechazo,
+            TotalMonto = grupo.Sum(f => f.Monto) + comisionFija, // Sumar monto y añadir comisión fija
+            Detalles = grupo.Select(f => new DetalleFactura
+            {
+                NumeroFactura = f.NumeroFactura,
+                Fecha = f.Fecha,
+                Monto = f.Monto
+            }).ToList()
+        }).ToList();
+
+    return reporte;
+}
+
+public class ReporteFacturas
+{
+    public string CodigoRechazo { get; set; }
+    public string MensajeRechazo { get; set; }
+    public decimal TotalMonto { get; set; }
+    public List<DetalleFactura> Detalles { get; set; }
+}
+
+public class DetalleFactura
+{
+    public int NumeroFactura { get; set; }
+    public DateTime Fecha { get; set; }
+    public decimal Monto { get; set; }
+}
+```
+
+### 3. **Mostrar Datos en la Vista**
+Usando Razor en tu vista puedes mostrar la información agrupada:
+
+```html
+@model List<ReporteFacturas>
+
+<table>
+    <thead>
+        <tr>
+            <th>Código Rechazo</th>
+            <th>Mensaje Rechazo</th>
+            <th>Total Monto</th>
+            <th>Detalles</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in Model)
+        {
+            <tr>
+                <td>@item.CodigoRechazo</td>
+                <td>@item.MensajeRechazo</td>
+                <td>@item.TotalMonto.ToString("C")</td>
+                <td>
+                    <ul>
+                        @foreach (var factura in item.Detalles)
+                        {
+                            <li>
+                                Factura @factura.NumeroFactura - Fecha: @factura.Fecha.ToString("dd/MM/yyyy") - Monto: @factura.Monto.ToString("C")
+                            </li>
+                        }
+                    </ul>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+```
+
+Con esto tendrás un reporte preciso, agrupado por el tipo de rechazo, incluyendo el total del monto y la comisión fija. ¿Hay algún ajuste específico que te gustaría hacer? 🚀
