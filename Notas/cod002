@@ -100,4 +100,37 @@ Usando Razor en tu vista puedes mostrar la información agrupada:
 </table>
 ```
 
-Con esto tendrás un reporte preciso, agrupado por el tipo de rechazo, incluyendo el total del monto y la comisión fija. ¿Hay algún ajuste específico que te gustaría hacer? 🚀
+Con esto tendrás un reporte preciso, agrupado por el tipo de rechazo, incluyendo el total del monto y la comisión fija. ¿Hay algún ajuste específico que te gustaría hacer?
+
+
+public List<ReporteFacturas> GenerarReporte(List<Factura> facturas, List<Banco> bancos, decimal comisionFija)
+{
+    var reporte = facturas
+        .Where(f => !string.IsNullOrEmpty(f.CodigoRechazo)) // Filtrar rechazadas
+        .Join(bancos, f => f.BancoId, b => b.BancoId, (f, b) => new { Factura = f, Banco = b }) // Unir con bancos
+        .GroupBy(fb => new { fb.Factura.CodigoRechazo, fb.Factura.MensajeRechazo }) // Agrupar por código y mensaje
+        .Select(grupo => new ReporteFacturas
+        {
+            CodigoRechazo = grupo.Key.CodigoRechazo,
+            MensajeRechazo = grupo.Key.MensajeRechazo,
+            TotalMonto = grupo.Sum(fb => fb.Factura.Monto) + comisionFija, // Sumar monto y añadir comisión fija
+            CantidadDocumentos = grupo.Count(), // Contar el número de documentos rechazados
+            Detalles = grupo.Select(fb => new DetalleFactura
+            {
+                NumeroFactura = fb.Factura.NumeroFactura,
+                Fecha = fb.Factura.Fecha,
+                Monto = fb.Factura.Monto,
+                NombreBanco = fb.Banco.NombreBanco // Incluir el nombre del banco
+            }).ToList()
+        }).ToList();
+
+    return reporte;
+}
+
+public class DetalleFactura
+{
+    public int NumeroFactura { get; set; }
+    public DateTime Fecha { get; set; }
+    public decimal Monto { get; set; }
+    public string NombreBanco { get; set; } // Nuevo campo para el nombre del banco
+}
