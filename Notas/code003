@@ -1,0 +1,40 @@
+public List<ReporteFacturas> GenerarReporte(
+    List<Factura> facturas, 
+    List<Banco> bancos, 
+    List<TalonarioFactura> talonarios, 
+    decimal comisionFija,
+    string filtroMoneda, 
+    string filtroCuenta)
+{
+    var reporte = facturas
+        .Where(f => f.CodigoRechazo != null)
+        .Join(bancos, f => f.BancoId, b => b.BancoId, (f, b) => new { Factura = f, Banco = b })
+        .GroupBy(fb => new { fb.Factura.CodigoRechazo ?? 0, fb.Factura.MensajeRechazo })
+        .Select(grupo => new ReporteFacturas
+        {
+            CodigoRechazo = grupo.Key.CodigoRechazo,
+            MensajeRechazo = grupo.Key.MensajeRechazo ?? "Sin mensaje",
+            TotalMonto = grupo.Sum(fb => fb.Factura.Monto) + comisionFija,
+            CantidadDocumentos = grupo.Count(),
+            Detalles = grupo.Select(fb => new DetalleFactura
+            {
+                NumeroFactura = fb.Factura.NumeroFactura,
+                Fecha = fb.Factura.Fecha,
+                Monto = fb.Factura.Monto,
+                NombreBanco = fb.Banco.NombreBanco,
+                ComisionFija = comisionFija,
+                SubDetalles = new List<SubDetalle>
+                {
+                    new SubDetalle { Concepto = "Cargo Administrativo", Valor = 50 },
+                    new SubDetalle { Concepto = "Ajuste Financiero", Valor = 30 }
+                },
+                Talonarios = talonarios
+                    .Where(t => t.NumeroFactura == fb.Factura.NumeroFactura 
+                        && t.Moneda == filtroMoneda 
+                        && t.Cuenta == filtroCuenta) // Filtrar por moneda y cuenta
+                    .ToList() // Agregar lista de talonarios filtrados
+            }).ToList()
+        }).ToList();
+
+    return reporte;
+}
