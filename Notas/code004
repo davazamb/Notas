@@ -1,0 +1,35 @@
+public List<ReporteFacturas> GenerarReporte(
+    List<Factura> facturas,
+    List<FacturaRechazo> rechazos,
+    List<Cliente> clientes,
+    int clienteFiltro)
+{
+    var reporte = facturas
+        .Join(clientes, f => f.ClienteId, c => c.ClienteId, (f, c) => new { Factura = f, Cliente = c })
+        .Join(rechazos, fc => fc.Factura.NumeroFactura, r => r.NumeroFactura, (fc, r) => new
+        {
+            Factura = fc.Factura,
+            Cliente = fc.Cliente,
+            Rechazo = r
+        })
+        .Where(x => x.Cliente.ClienteId == clienteFiltro)
+        .GroupBy(x => x.Rechazo.CodigoRechazo)
+        .Select(grupo => new ReporteFacturas
+        {
+            CodigoRechazo = grupo.Key,
+            MensajeRechazo = rechazos.FirstOrDefault(r => r.CodigoRechazo == grupo.Key)?.MensajeRechazo ?? "No definido",
+            TotalMonto = grupo.Sum(x => x.Rechazo.ComisionFija),
+            CantidadDocumentos = grupo.Count(),
+            Detalles = grupo.Select(x => new DetalleFactura
+            {
+                NumeroFactura = x.Factura.NumeroFactura,
+                Fecha = x.Factura.Fecha,
+                Monto = 0, // O el que se incorpore luego
+                ComisionFija = x.Rechazo.ComisionFija,
+                NombreBanco1 = x.Factura.NombreBanco1,
+                NombreBanco2 = x.Factura.NombreBanco2
+            }).ToList()
+        }).ToList();
+
+    return reporte;
+}
