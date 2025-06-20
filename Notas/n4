@@ -1,0 +1,69 @@
+public async Task<IActionResult> InsertarUsuarioAsync(Usuario usuario)
+{
+    const int maxIntentos = 3;
+    int intentos = 0;
+
+    while (intentos < maxIntentos)
+    {
+        await using var connection = new SqlConnection(connectionString);
+        await connection.OpenAsync();
+
+        await using var transaction = await connection.BeginTransactionAsync(IsolationLevel.Serializable);
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+
+        try
+        {
+            // Obtener nuevo Id de forma segura
+            command.CommandText = "SELECT ISNULL(MAX(Id), 0) + 1 FROM Usuarios";
+            int nuevoId = Convert.ToInt32(await command.ExecuteScalarAsync());
+            usuario.Id = nuevoId;
+
+            // Preparar INSERT
+            command.CommandText = @"
+                INSERT INTO Usuarios (Id, Nombre, FechaNacimiento)
+                VALUES (@Id, @Nombre, @FechaNacimiento)";
+            command.Parameters.Clear();
+
+            command.Parameters.Add(new SqlParameter("@Id", SqlDbType.Int) { Value = usuario.Id });
+            command.Parameters.Add(new SqlParameter("@Nombre", SqlDbType.NVarChar, 100)
+            {
+                Value = usuario.Nombre ?? (object)DBNull.Value
+            });
+            command.Parameters.Add(new SqlParameter("@FechaNacimiento", SqlDbType.Date)
+            {
+                Value = usuario.FechaNacimiento > SqlDateTime.MinValue.Value
+                    ? usuario.FechaNacimiento
+                    : DBNull.Value
+            });
+
+            await command.ExecuteNonQueryAsync();
+            await transaction.CommitAsync();
+
+            return Ok($"✔️ Usuario insertado con Id {usuario.Id}");
+        }
+        catch (SqlException ex) when (ex.Number == 2627 || ex.Number == 2601)
+        {
+            // Colisión de clave primaria
+            await transaction.RollbackAsync();
+            intentos++;
+            if (intentos >= maxIntentos)
+                return Conflict("⚠️ No se pudo insertar: colisión de clave primaria tras múltiples intentos.");
+        }
+        catch (SqlException ex) when (ex.Number == 1205)
+        {
+            // Deadlock victim
+            await transaction.RollbackAsync();
+            intentos++;
+            if (intentos >= maxIntentos)
+                return StatusCode(500, "🔁 Deadlock persistente. No se pudo completar la inserción.");
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return StatusCode(500, $"💥 Error inesperado: {ex.Message}");
+        }
+    }
+
+    return StatusCode(500, "🚫 No se pudo completar la inserción tras varios intentos.");
+}
