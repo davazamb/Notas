@@ -1,0 +1,153 @@
+¡Perfecto, David! Aquí tienes un ejemplo completo de una solución en .NET 6+ que implementa un job de Quartz para purgar registros de tres tablas distintas a una base de datos histórica, con configuración parametrizable desde `appsettings.json`, usando Entity Framework Core e interfaces limpias para mantener una arquitectura mantenible y escalable.
+
+---
+
+## 📁 `appsettings.json`
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=.;Database=PrincipalDb;Trusted_Connection=True;",
+    "HistoricalDb": "Server=.;Database=HistoricoDb;Trusted_Connection=True;"
+  },
+  "DataPurgeJob": {
+    "PurgeThresholdInMonths": 3,
+    "Tables": [
+      { "Name": "Eventos", "KeyColumn": "FechaEvento" },
+      { "Name": "LogTransacciones", "KeyColumn": "Fecha" },
+      { "Name": "SesionesUsuario", "KeyColumn": "FechaCierre" }
+    ]
+  }
+}
+```
+
+---
+
+## 🧩 `TableInfo.cs`
+```csharp
+public class TableInfo
+{
+    public string Name { get; set; }
+    public string KeyColumn { get; set; }
+}
+```
+
+---
+
+## 🔌 Interface: `IDataPurger.cs`
+```csharp
+public interface IDataPurger
+{
+    Task PurgeOldRecordsAsync(int months, CancellationToken cancellationToken);
+}
+```
+
+---
+
+## ⚙️ Implementación: `DataPurger.cs`
+```csharp
+public class DataPurger : IDataPurger
+{
+    private readonly IConfiguration _config;
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public DataPurger(IConfiguration config, IServiceScopeFactory scopeFactory)
+    {
+        _config = config;
+        _scopeFactory = scopeFactory;
+    }
+
+    public async Task PurgeOldRecordsAsync(int months, CancellationToken cancellationToken)
+    {
+        var purgeDate = DateTime.UtcNow.AddMonths(-months);
+        var tables = _config.GetSection("DataPurgeJob:Tables").Get<List<TableInfo>>();
+
+        foreach (var table in tables)
+        {
+            await ProcessTableAsync(table, purgeDate, cancellationToken);
+        }
+    }
+
+    private async Task ProcessTableAsync(TableInfo table, DateTime purgeDate, CancellationToken cancellationToken)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var sourceDb = scope.ServiceProvider.GetRequiredService<SourceDbContext>();
+        var archiveDb = scope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
+
+        var query = $"SELECT * FROM {table.Name} WHERE {table.KeyColumn} < @date";
+        var parameters = new[] { new SqlParameter("@date", purgeDate) };
+
+        var oldData = await sourceDb.Set<dynamic>().FromSqlRaw(query, parameters).ToListAsync(cancellationToken);
+
+        foreach (var item in oldData)
+        {
+            await archiveDb.AddAsync(item, cancellationToken);
+            sourceDb.Remove(item);
+        }
+
+        await archiveDb.SaveChangesAsync(cancellationToken);
+        await sourceDb.SaveChangesAsync(cancellationToken);
+    }
+}
+```
+
+---
+
+## ⏱️ Quartz Job: `DataPurgeJob.cs`
+```csharp
+public class DataPurgeJob : IJob
+{
+    private readonly IDataPurger _purger;
+    private readonly IConfiguration _config;
+
+    public DataPurgeJob(IDataPurger purger, IConfiguration config)
+    {
+        _purger = purger;
+        _config = config;
+    }
+
+    public async Task Execute(IJobExecutionContext context)
+    {
+        var months = _config.GetValue<int>("DataPurgeJob:PurgeThresholdInMonths");
+        await _purger.PurgeOldRecordsAsync(months, context.CancellationToken);
+    }
+}
+```
+
+---
+
+## 🏗️ `Program.cs` (registro de Quartz y servicios)
+```csharp
+builder.Services.AddDbContext<SourceDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+
+builder.Services.AddDbContext<ArchiveDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("HistoricalDb")));
+
+builder.Services.AddScoped<IDataPurger, DataPurger>();
+
+builder.Services.AddQuartz(q =>
+{
+    q.UseMicrosoftDependencyInjectionJobFactory();
+    var jobKey = new JobKey("DataPurgeJob");
+
+    q.AddJob<DataPurgeJob>(opts => opts.WithIdentity(jobKey));
+    q.AddTrigger(opts => opts
+        .ForJob(jobKey)
+        .WithIdentity("DataPurgeTrigger")
+        .WithCronSchedule("0 0 3 * * ?")); // Todos los días a las 03:00
+});
+
+builder.Services.AddQuartzHostedService(opt => opt.WaitForJobsToComplete = true);
+```
+
+---
+
+### 🧠 Extras útiles
+
+- Si las estructuras de tablas difieren demasiado, puedes usar `ExpandoObject` o Dapper para mayor flexibilidad.
+- Asegúrate de tener las migraciones listas para ambas DBs o manejar los esquemas manualmente si son independientes.
+- Puedes registrar logs de las purgas con un middleware de auditoría si necesitas trazabilidad.
+
+---
+
+¿Te gustaría que agregue manejo de errores con logs tipo `ILogger`, o incluso una opción para simular la purga (modo dry-run)?
