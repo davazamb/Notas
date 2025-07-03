@@ -1,0 +1,148 @@
+public class DataPurger : IDataPurger
+{
+    private readonly IConfiguration _config;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly ILogger<DataPurger> _logger;
+
+    public DataPurger(IConfiguration config, IServiceScopeFactory scopeFactory, ILogger<DataPurger> logger)
+    {
+        _config = config;
+        _scopeFactory = scopeFactory;
+        _logger = logger;
+    }
+
+    public async Task PurgeOldRecordsAsync(int months, CancellationToken token)
+    {
+        var purgeDate = DateTime.UtcNow.AddMonths(-months);
+        _logger.LogInformation("Iniciando purga. Fecha límite: {Date}", purgeDate);
+
+        var simples = _config.GetSection("DataPurgeJob:Tables").Get<List<TableInfo>>();
+        var relacionales = _config.GetSection("DataPurgeJob:RelationalGroups").Get<List<RelationalGroup>>();
+
+        foreach (var tabla in simples)
+            await ProcessSimpleTableAsync(tabla, purgeDate, token);
+
+        foreach (var grupo in relacionales)
+            await ProcessRelationalGroupAsync(grupo, purgeDate, token);
+
+        _logger.LogInformation("Purga completa.");
+    }
+
+    private async Task ProcessSimpleTableAsync(TableInfo tabla, DateTime purgeDate, CancellationToken token)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var source = scope.ServiceProvider.GetRequiredService<SourceDbContext>();
+        var archive = scope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
+
+        _logger.LogInformation("Tabla: {Table}", tabla.Name);
+        try
+        {
+            var query = $"SELECT * FROM {tabla.Name} WHERE {tabla.KeyColumn} < @date";
+            var datos = await source.Set<dynamic>().FromSqlRaw(query, new SqlParameter("@date", purgeDate)).ToListAsync(token);
+
+            foreach (var d in datos)
+            {
+                await archive.AddAsync(d, token);
+                source.Remove(d);
+            }
+
+            await archive.SaveChangesAsync(token);
+            await source.SaveChangesAsync(token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error purgando {Table}", tabla.Name);
+        }
+    }
+
+    private async Task ProcessRelationalGroupAsync(RelationalGroup grupo, DateTime purgeDate, CancellationToken token)
+    {
+        using var scope = _scopeFactory.CreateScope();
+        var source = scope.ServiceProvider.GetRequiredService<SourceDbContext>();
+        var archive = scope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
+
+        _logger.LogInformation("Relación: {Parent}", grupo.ParentTable.Name);
+
+        try
+        {
+            var parentQuery = $"SELECT * FROM {grupo.ParentTable.Name} WHERE {grupo.ParentTable.KeyColumn} < @date";
+            var padres = await source.Set<dynamic>().FromSqlRaw(parentQuery, new SqlParameter("@date", purgeDate)).ToListAsync(token);
+
+            foreach (var padre in padres)
+            {
+                var parentId = padre.Id;
+                foreach (var hijo in grupo.ChildTables)
+                {
+                    var hijoQuery = $"SELECT * FROM {hijo.Name} WHERE {hijo.ForeignKey} = @id";
+                    var hijos = await source.Set<dynamic>().FromSqlRaw(hijoQuery, new SqlParameter("@id", parentId)).ToListAsync(token);
+
+                    foreach (var h in hijos)
+                    {
+                        await archive.AddAsync(h, token);
+                        source.Remove(h);
+                    }
+                }
+
+                await archive.AddAsync(padre, token);
+                source.Remove(padre);
+            }
+
+            await archive.SaveChangesAsync(token);
+            await source.SaveChangesAsync(token);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error en relación {Parent}", grupo.ParentTable.Name);
+        }
+    }
+}
+
+------------------------------------------------
+private async Task ProcessTableAsync(TableInfo table, DateTime purgeDate, CancellationToken token)
+{
+    using var scope = _scopeFactory.CreateScope();
+    var sourceDb = scope.ServiceProvider.GetRequiredService<SourceDbContext>();
+    var archiveDb = scope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
+
+    var type = ResolveType(table.EntityType);
+
+    // Obtener DbSet<T>
+    var setMethod = typeof(DbContext).GetMethod(nameof(DbContext.Set), Type.EmptyTypes);
+    var genericSet = setMethod.MakeGenericMethod(type).Invoke(sourceDb, null);
+    var queryable = genericSet as IQueryable;
+
+    // Filtrar con EF.Property
+    var param = Expression.Parameter(type, "x");
+    var propertyAccess = Expression.Call(
+        typeof(EF), nameof(EF.Property),
+        new[] { typeof(DateTime) },
+        param,
+        Expression.Constant(table.KeyColumn)
+    );
+    var condition = Expression.LessThan(propertyAccess, Expression.Constant(purgeDate));
+    var lambda = Expression.Lambda(condition, param);
+
+    var whereMethod = typeof(Queryable).GetMethods()
+        .First(m => m.Name == "Where" && m.GetParameters().Length == 2)
+        .MakeGenericMethod(type);
+
+    var filtered = whereMethod.Invoke(null, new object[] { queryable, lambda });
+    var toListMethod = typeof(EntityFrameworkQueryableExtensions)
+        .GetMethod(nameof(EntityFrameworkQueryableExtensions.ToListAsync))
+        .MakeGenericMethod(type);
+
+    var task = (Task)toListMethod.Invoke(null, new object[] { filtered, token });
+    await task.ConfigureAwait(false);
+
+    var resultProperty = task.GetType().GetProperty("Result");
+    var entities = resultProperty.GetValue(task) as IEnumerable;
+
+    foreach (var item in entities)
+    {
+        await (Task)archiveDb.AddAsync(item, token);
+        sourceDb.Remove(item);
+    }
+
+    await archiveDb.SaveChangesAsync(token);
+    await sourceDb.SaveChangesAsync(token);
+}
