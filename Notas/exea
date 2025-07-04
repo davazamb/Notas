@@ -1,36 +1,79 @@
-¡Buena idea, David! 💡 Un desacople limpio facilita pruebas, mantenimiento y futuras extensiones (como paginación o paralelismo por tabla). Vamos a reorganizar el `DataPurgeJob` para separar responsabilidades. Aquí tienes una estructura desacoplada y clara:
+¡Aquí lo tienes, David! 🔧 Este es el ejemplo **completo**, **desacoplado por métodos** y con soporte para **logs**, usando **.NET Core**, **Quartz.NET**, **Entity Framework Core**, y configuración externa desde `appsettings.json`. Incluye todo: desde los modelos hasta la programación del job.
 
 ---
 
-### 🧠 1. Estructura general del `DataPurgeJob`
+## 📁 `appsettings.json`
 
-```csharp
-public class DataPurgeJob : IJob
+```json
 {
-    private readonly IPurgeService _purgeService;
-
-    public DataPurgeJob(IPurgeService purgeService)
-    {
-        _purgeService = purgeService;
-    }
-
-    public async Task Execute(IJobExecutionContext context)
-    {
-        await _purgeService.PurgeAllAsync();
-    }
+  "PurgeSettings": {
+    "MonthsToKeep": 3,
+    "SourceConnection": "Data Source=source.db",
+    "ArchiveConnection": "Data Source=archive.db",
+    "Tables": [
+      { "Source": "MainTableA", "Archive": "ArchiveTableA" },
+      { "Source": "MainTableB", "Archive": "ArchiveTableB" },
+      { "Source": "MainTableC", "Archive": "ArchiveTableC" }
+    ]
+  }
 }
 ```
 
 ---
 
-### 🔧 2. Interfaz y servicio de purga
+## ⚙️ Clases de configuración
+
+```csharp
+public class PurgeSettings
+{
+    public int MonthsToKeep { get; set; }
+    public string SourceConnection { get; set; }
+    public string ArchiveConnection { get; set; }
+    public List<TableMapping> Tables { get; set; }
+}
+
+public class TableMapping
+{
+    public string Source { get; set; }
+    public string Archive { get; set; }
+}
+```
+
+---
+
+## 🧾 Entidad para Logging
+
+```csharp
+public class PurgeLog
+{
+    public int Id { get; set; }
+    public string TableName { get; set; }
+    public DateTime StartedAt { get; set; }
+    public DateTime? EndedAt { get; set; }
+    public int RecordsMoved { get; set; }
+    public bool Success { get; set; }
+    public string ErrorMessage { get; set; }
+}
+```
+
+Inclúyelo en `ArchiveDbContext`:
+
+```csharp
+public DbSet<PurgeLog> PurgeLogs { get; set; }
+```
+
+---
+
+## 🧪 Servicio: `IPurgeService` y `PurgeService`
 
 ```csharp
 public interface IPurgeService
 {
     Task PurgeAllAsync();
 }
+```
 
+```csharp
 public class PurgeService : IPurgeService
 {
     private readonly PurgeSettings _settings;
@@ -86,7 +129,7 @@ public class PurgeService : IPurgeService
             "MainTableA" => await PurgeAsync(source.MainTableA, archive.ArchiveTableA, x => x.CreatedAt <= purgeDate),
             "MainTableB" => await PurgeAsync(source.MainTableB, archive.ArchiveTableB, x => x.Timestamp <= purgeDate),
             "MainTableC" => await PurgeAsync(source.MainTableC, archive.ArchiveTableC, x => x.InsertDate <= purgeDate),
-            _ => throw new InvalidOperationException($"No handler for table: {tableName}")
+            _ => throw new InvalidOperationException($"Tabla no reconocida: {tableName}")
         };
     }
 
@@ -102,23 +145,54 @@ public class PurgeService : IPurgeService
 
 ---
 
-### 🧷 3. Registro en `Program.cs`
+## ⏰ Job Quartz desacoplado
 
 ```csharp
-builder.Services.AddScoped<IPurgeService, PurgeService>();
+public class DataPurgeJob : IJob
+{
+    private readonly IPurgeService _purgeService;
+
+    public DataPurgeJob(IPurgeService purgeService)
+    {
+        _purgeService = purgeService;
+    }
+
+    public async Task Execute(IJobExecutionContext context)
+    {
+        await _purgeService.PurgeAllAsync();
+    }
+}
 ```
 
 ---
 
-### ✨ ¿Qué mejoras aporta este desacople?
+## 🧷 Registro en `Program.cs`
 
-| Componente        | Rol específico                   |
-|-------------------|-----------------------------------|
-| `DataPurgeJob`     | Solo ejecuta la tarea programada |
-| `IPurgeService` / `PurgeService` | Orquesta lógica de purga y logging |
-| `PurgeAsync` genérico | Maneja movido/purgado con expresiones LINQ |
-| `PurgeTableAsync` | Traduce nombres de tablas a operaciones concretas |
+```csharp
+builder.Services.Configure<PurgeSettings>(builder.Configuration.GetSection("PurgeSettings"));
+
+builder.Services.AddDbContext<SourceDbContext>(options =>
+    options.UseSqlite(builder.Configuration["PurgeSettings:SourceConnection"]));
+
+builder.Services.AddDbContext<ArchiveDbContext>(options =>
+    options.UseSqlite(builder.Configuration["PurgeSettings:ArchiveConnection"]));
+
+builder.Services.AddScoped<IPurgeService, PurgeService>();
+
+builder.Services.AddQuartz(q =>
+{
+    var jobKey = new JobKey("DataPurgeJob");
+    q.AddJob<DataPurgeJob>(opts => opts.WithIdentity(jobKey));
+    q.AddTrigger(t => t
+        .ForJob(jobKey)
+        .WithSimpleSchedule(s => s.WithIntervalInHours(24).RepeatForever()));
+});
+
+builder.Services.AddQuartzHostedService();
+```
 
 ---
 
-¿Te gustaría agregar una capa de transacción por tabla, usar genéricos completos entre contextos o inyectar un logger para seguimiento por consola? Estoy listo para afinarlo al máximo nivel 🛠️🚀
+Este diseño está listo para crecer: puedes añadir transacciones por tabla, políticas de reintento, métricas o incluso paralelismo por grupo de tablas.
+
+¿Quieres que lo preparemos con `ILogger`, exportación de logs o integrarlo con Hangfire como alternativa? Lo llevamos al siguiente nivel cuando tú quieras 🧠💥
