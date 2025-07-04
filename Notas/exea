@@ -1,0 +1,124 @@
+¡Buena idea, David! 💡 Un desacople limpio facilita pruebas, mantenimiento y futuras extensiones (como paginación o paralelismo por tabla). Vamos a reorganizar el `DataPurgeJob` para separar responsabilidades. Aquí tienes una estructura desacoplada y clara:
+
+---
+
+### 🧠 1. Estructura general del `DataPurgeJob`
+
+```csharp
+public class DataPurgeJob : IJob
+{
+    private readonly IPurgeService _purgeService;
+
+    public DataPurgeJob(IPurgeService purgeService)
+    {
+        _purgeService = purgeService;
+    }
+
+    public async Task Execute(IJobExecutionContext context)
+    {
+        await _purgeService.PurgeAllAsync();
+    }
+}
+```
+
+---
+
+### 🔧 2. Interfaz y servicio de purga
+
+```csharp
+public interface IPurgeService
+{
+    Task PurgeAllAsync();
+}
+
+public class PurgeService : IPurgeService
+{
+    private readonly PurgeSettings _settings;
+    private readonly IServiceScopeFactory _scopeFactory;
+
+    public PurgeService(IOptions<PurgeSettings> settings, IServiceScopeFactory scopeFactory)
+    {
+        _settings = settings.Value;
+        _scopeFactory = scopeFactory;
+    }
+
+    public async Task PurgeAllAsync()
+    {
+        var purgeDate = DateTime.UtcNow.AddMonths(-_settings.MonthsToKeep);
+
+        using var scope = _scopeFactory.CreateScope();
+        var sourceDb = scope.ServiceProvider.GetRequiredService<SourceDbContext>();
+        var archiveDb = scope.ServiceProvider.GetRequiredService<ArchiveDbContext>();
+
+        foreach (var table in _settings.Tables)
+        {
+            var log = new PurgeLog
+            {
+                TableName = table.Source,
+                StartedAt = DateTime.UtcNow,
+                Success = false
+            };
+
+            try
+            {
+                log.RecordsMoved = await PurgeTableAsync(table.Source, purgeDate, sourceDb, archiveDb);
+                log.Success = true;
+            }
+            catch (Exception ex)
+            {
+                log.ErrorMessage = ex.Message;
+            }
+            finally
+            {
+                log.EndedAt = DateTime.UtcNow;
+                await archiveDb.PurgeLogs.AddAsync(log);
+            }
+        }
+
+        await archiveDb.SaveChangesAsync();
+        await sourceDb.SaveChangesAsync();
+    }
+
+    private async Task<int> PurgeTableAsync(string tableName, DateTime purgeDate, SourceDbContext source, ArchiveDbContext archive)
+    {
+        return tableName switch
+        {
+            "MainTableA" => await PurgeAsync(source.MainTableA, archive.ArchiveTableA, x => x.CreatedAt <= purgeDate),
+            "MainTableB" => await PurgeAsync(source.MainTableB, archive.ArchiveTableB, x => x.Timestamp <= purgeDate),
+            "MainTableC" => await PurgeAsync(source.MainTableC, archive.ArchiveTableC, x => x.InsertDate <= purgeDate),
+            _ => throw new InvalidOperationException($"No handler for table: {tableName}")
+        };
+    }
+
+    private async Task<int> PurgeAsync<T>(DbSet<T> sourceSet, DbSet<T> archiveSet, Expression<Func<T, bool>> filter) where T : class
+    {
+        var oldRecords = await sourceSet.Where(filter).ToListAsync();
+        await archiveSet.AddRangeAsync(oldRecords);
+        sourceSet.RemoveRange(oldRecords);
+        return oldRecords.Count;
+    }
+}
+```
+
+---
+
+### 🧷 3. Registro en `Program.cs`
+
+```csharp
+builder.Services.AddScoped<IPurgeService, PurgeService>();
+```
+
+---
+
+### ✨ ¿Qué mejoras aporta este desacople?
+
+| Componente        | Rol específico                   |
+|-------------------|-----------------------------------|
+| `DataPurgeJob`     | Solo ejecuta la tarea programada |
+| `IPurgeService` / `PurgeService` | Orquesta lógica de purga y logging |
+| `PurgeAsync` genérico | Maneja movido/purgado con expresiones LINQ |
+| `PurgeTableAsync` | Traduce nombres de tablas a operaciones concretas |
+
+---
+
+¿Te gustaría agregar una capa de transacción por tabla, usar genéricos completos entre contextos o inyectar un logger para seguimiento por consola? Estoy listo para afinarlo al máximo nivel 🛠️🚀
