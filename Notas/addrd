@@ -1,0 +1,252 @@
+Encantado, David. Aquí tienes el ejemplo **completo**, modular y funcional para una solución de **purga automática** con Quartz.NET, EF Core y configuración dinámica. Incluye:
+
+1. 🎛 `appsettings.json` parametrizable  
+2. 🧩 Modelos de configuración  
+3. ⚙️ Servicios por tabla (`EventosSistema`, `ErroresApp`, `TransaccionesApi`)  
+4. 🧠 Job con Quartz  
+5. 🛠 Registro en `Program.cs`  
+6. 🗃 Entidades históricas ejemplo  
+
+---
+
+## 📁 1. `appsettings.json`
+
+```json
+"DataPurgeSettings": {
+  "PurgeThresholdDays": 90,
+  "Tables": [
+    { "Name": "EventosSistema", "Enabled": true },
+    { "Name": "ErroresApp", "Enabled": true },
+    { "Name": "TransaccionesApi", "Enabled": true }
+  ]
+}
+```
+
+---
+
+## 🧩 2. Configuración
+
+```csharp
+public class TableConfig
+{
+    public string Name { get; set; }
+    public bool Enabled { get; set; }
+}
+
+public class DataPurgeSettings
+{
+    public int PurgeThresholdDays { get; set; }
+    public List<TableConfig> Tables { get; set; }
+}
+```
+
+---
+
+## ⚙️ 3. Interfaces y Servicios
+
+### 🔗 Interface común
+
+```csharp
+public interface IDataPurgeService
+{
+    string TableName { get; }
+    Task PurgeOldDataAsync(DateTime purgeBeforeDate);
+}
+```
+
+---
+
+### 🪵 `EventosSistemaPurgeService.cs`
+
+```csharp
+public class EventosSistemaPurgeService : IDataPurgeService
+{
+    private readonly AppDbContext _context;
+    public string TableName => "EventosSistema";
+
+    public EventosSistemaPurgeService(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task PurgeOldDataAsync(DateTime purgeBeforeDate)
+    {
+        var datos = await _context.EventosSistema
+            .Where(e => e.FechaDepuracion < purgeBeforeDate)
+            .ToListAsync();
+
+        foreach (var item in datos)
+        {
+            var historico = new HistoricoEvento
+            {
+                FechaEvento = item.FechaEvento,
+                Descripcion = item.Descripcion,
+                FechaDepuracion = DateTime.UtcNow
+            };
+
+            _context.HistoricoEventos.Add(historico);
+            _context.EventosSistema.Remove(item);
+        }
+
+        await _context.SaveChangesAsync();
+    }
+}
+```
+
+---
+
+### 🐞 `ErroresAppPurgeService.cs`
+
+```csharp
+public class ErroresAppPurgeService : IDataPurgeService
+{
+    private readonly AppDbContext _context;
+    public string TableName => "ErroresApp";
+
+    public ErroresAppPurgeService(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task PurgeOldDataAsync(DateTime purgeBeforeDate)
+    {
+        var errores = await _context.ErroresApp
+            .Where(e => e.FechaDepuracion < purgeBeforeDate)
+            .ToListAsync();
+
+        foreach (var item in errores)
+        {
+            var historico = new HistoricoError
+            {
+                Mensaje = item.Mensaje,
+                StackTrace = item.StackTrace,
+                FechaError = item.FechaError,
+                FechaDepuracion = DateTime.UtcNow
+            };
+
+            _context.HistoricoErrores.Add(historico);
+            _context.ErroresApp.Remove(item);
+        }
+
+        await _context.SaveChangesAsync();
+    }
+}
+```
+
+---
+
+### 🔄 `TransaccionesApiPurgeService.cs`
+
+```csharp
+public class TransaccionesApiPurgeService : IDataPurgeService
+{
+    private readonly AppDbContext _context;
+    public string TableName => "TransaccionesApi";
+
+    public TransaccionesApiPurgeService(AppDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task PurgeOldDataAsync(DateTime purgeBeforeDate)
+    {
+        var transacciones = await _context.TransaccionesApi
+            .Where(t => t.FechaDepuracion < purgeBeforeDate)
+            .ToListAsync();
+
+        foreach (var item in transacciones)
+        {
+            var historico = new HistoricoTransaccion
+            {
+                IdExterno = item.IdExterno,
+                Estado = item.Estado,
+                FechaCreacion = item.FechaCreacion,
+                FechaDepuracion = DateTime.UtcNow
+            };
+
+            _context.HistoricoTransacciones.Add(historico);
+            _context.TransaccionesApi.Remove(item);
+        }
+
+        await _context.SaveChangesAsync();
+    }
+}
+```
+
+---
+
+## 🧠 4. Quartz Job
+
+```csharp
+public class PurgeJob : IJob
+{
+    private readonly IEnumerable<IDataPurgeService> _services;
+    private readonly IOptions<DataPurgeSettings> _settings;
+
+    public PurgeJob(IEnumerable<IDataPurgeService> services, IOptions<DataPurgeSettings> settings)
+    {
+        _services = services;
+        _settings = settings;
+    }
+
+    public async Task Execute(IJobExecutionContext context)
+    {
+        var purgeDate = DateTime.UtcNow.AddDays(-_settings.Value.PurgeThresholdDays);
+
+        foreach (var config in _settings.Value.Tables.Where(t => t.Enabled))
+        {
+            var service = _services.FirstOrDefault(s => s.TableName == config.Name);
+            if (service != null)
+            {
+                await service.PurgeOldDataAsync(purgeDate);
+            }
+        }
+    }
+}
+```
+
+---
+
+## 🛠 5. Registro de Servicios y Quartz
+
+```csharp
+builder.Services.Configure<DataPurgeSettings>(
+    builder.Configuration.GetSection("DataPurgeSettings"));
+
+builder.Services.AddScoped<IDataPurgeService, EventosSistemaPurgeService>();
+builder.Services.AddScoped<IDataPurgeService, ErroresAppPurgeService>();
+builder.Services.AddScoped<IDataPurgeService, TransaccionesApiPurgeService>();
+
+builder.Services.AddQuartz(q =>
+{
+    var jobKey = new JobKey("PurgeJob");
+    q.AddJob<PurgeJob>(opts => opts.WithIdentity(jobKey));
+    q.AddTrigger(opts => opts
+        .ForJob(jobKey)
+        .WithSimpleSchedule(x => x.WithIntervalInHours(24).RepeatForever()));
+});
+
+builder.Services.AddQuartzHostedService();
+```
+
+---
+
+## 🗃 6. Entidades históricas (ejemplo)
+
+```csharp
+public class HistoricoEvento
+{
+    public int Id { get; set; }
+    public DateTime FechaEvento { get; set; }
+    public string Descripcion { get; set; }
+    public DateTime FechaDepuracion { get; set; }
+}
+```
+
+(Similar para `HistoricoError` y `HistoricoTransaccion`).
+
+---
+
+Esto es totalmente modular, extensible, y cumple con los principios que te gustan: **claridad, trazabilidad y separación de responsabilidades**.
+
+¿Quieres que le sumemos logs estructurados, decoradores para control de errores o usar Polly para retry? Lo afinamos contigo paso a paso.
