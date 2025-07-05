@@ -1,0 +1,186 @@
+Claro, David. Te comparto el ejemplo completo y funcional del microservicio ReporteService con los endpoints de consulta y eliminación basados en parámetros, junto con su configuración Swagger (OpenAPI). Esta solución te permitirá integrar purgas dinámicas desde el microservicio de purga con total trazabilidad y seguridad.
+
+---
+
+🧱 Estructura del microservicio ReporteService
+
+`
+ReporteService/
+├── Controllers/
+│   └── ReporteController.cs
+├── Models/
+│   └── Reporte.cs
+│   └── ReporteDTO.cs
+├── DTOs/
+│   └── FiltroReporteRequest.cs
+│   └── EliminarPorFiltroRequest.cs
+│   └── ResultadoPurgadoDTO.cs
+├── Services/
+│   └── ReporteService.cs
+├── Data/
+│   └── AppDbContext.cs
+└── Startup.cs / Program.cs
+`
+
+---
+
+🧾 Clases DTO y Modelo
+
+`csharp
+// Modelo en base de datos
+public class Reporte
+{
+    public long Id { get; set; }
+    public string Cliente { get; set; }
+    public string Estado { get; set; }
+    public DateTime FechaCreacion { get; set; }
+}
+
+// DTO de respuesta
+public class ReporteDTO
+{
+    public long Id { get; set; }
+    public string Cliente { get; set; }
+    public string Estado { get; set; }
+    public DateTime FechaCreacion { get; set; }
+}
+
+// Filtro para GET/DELETE
+public class FiltroReporteRequest
+{
+    public DateTime? FechaDesde { get; set; }
+    public DateTime? FechaHasta { get; set; }
+    public string? Cliente { get; set; }
+    public string? Estado { get; set; }
+}
+
+// Request de eliminación
+public class EliminarPorFiltroRequest : FiltroReporteRequest
+{
+    public bool ModoSimulacion { get; set; } = false;
+}
+
+// Respuesta de purga
+public class ResultadoPurgadoDTO
+{
+    public int Cantidad { get; set; }
+    public bool Simulado { get; set; }
+}
+`
+
+---
+
+🎛️ Servicio ReporteService.cs
+
+`csharp
+public class ReporteService
+{
+    private readonly AppDbContext _db;
+
+    public ReporteService(AppDbContext db) => _db = db;
+
+    public async Task<List<ReporteDTO>> FiltrarReportesAsync(FiltroReporteRequest filtro)
+    {
+        var query = _db.Reportes.AsQueryable();
+
+        if (filtro.FechaDesde.HasValue)
+            query = query.Where(r => r.FechaCreacion >= filtro.FechaDesde);
+        if (filtro.FechaHasta.HasValue)
+            query = query.Where(r => r.FechaCreacion <= filtro.FechaHasta);
+        if (!string.IsNullOrWhiteSpace(filtro.Cliente))
+            query = query.Where(r => r.Cliente == filtro.Cliente);
+        if (!string.IsNullOrWhiteSpace(filtro.Estado))
+            query = query.Where(r => r.Estado == filtro.Estado);
+
+        return await query
+            .Select(r => new ReporteDTO
+            {
+                Id = r.Id,
+                Cliente = r.Cliente,
+                Estado = r.Estado,
+                FechaCreacion = r.FechaCreacion
+            })
+            .ToListAsync();
+    }
+
+    public async Task<ResultadoPurgadoDTO> EliminarPorFiltroAsync(EliminarPorFiltroRequest filtro)
+    {
+        var query = _db.Reportes.AsQueryable();
+
+        if (filtro.FechaDesde.HasValue)
+            query = query.Where(r => r.FechaCreacion >= filtro.FechaDesde);
+        if (filtro.FechaHasta.HasValue)
+            query = query.Where(r => r.FechaCreacion <= filtro.FechaHasta);
+        if (!string.IsNullOrWhiteSpace(filtro.Cliente))
+            query = query.Where(r => r.Cliente == filtro.Cliente);
+        if (!string.IsNullOrWhiteSpace(filtro.Estado))
+            query = query.Where(r => r.Estado == filtro.Estado);
+
+        var registros = await query.ToListAsync();
+
+        if (filtro.ModoSimulacion)
+            return new ResultadoPurgadoDTO { Cantidad = registros.Count, Simulado = true };
+
+        _db.Reportes.RemoveRange(registros);
+        await _db.SaveChangesAsync();
+
+        return new ResultadoPurgadoDTO { Cantidad = registros.Count, Simulado = false };
+    }
+}
+`
+
+---
+
+🚪 Controlador ReporteController.cs
+
+`csharp
+[ApiController]
+[Route("reportes")]
+public class ReporteController : ControllerBase
+{
+    private readonly ReporteService _service;
+
+    public ReporteController(ReporteService service) => _service = service;
+
+    /// <summary>Consulta reportes por filtros</summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(List<ReporteDTO>), 200)]
+    public async Task<IActionResult> GetReportes([FromQuery] FiltroReporteRequest filtro)
+        => Ok(await _service.FiltrarReportesAsync(filtro));
+
+    /// <summary>Elimina reportes filtrados por fecha, cliente, etc.</summary>
+    [HttpDelete]
+    [ProducesResponseType(typeof(ResultadoPurgadoDTO), 200)]
+    public async Task<IActionResult> DeleteReportes([FromBody] EliminarPorFiltroRequest filtro)
+        => Ok(await _service.EliminarPorFiltroAsync(filtro));
+}
+`
+
+---
+
+📘 Swagger generado (Swashbuckle)
+
+- Accesible en: https://tuservicio/swagger
+- Parámetros de consulta totalmente visibles
+- Incluye ejemplo automático del body EliminarPorFiltroRequest
+
+---
+
+🧪 Ejemplo de consulta desde Swagger UI
+
+GET /reportes?fechaDesde=2025-01-01&fechaHasta=2025-04-01&cliente=ACME&estado=Finalizado
+
+DELETE /reportes
+
+`json
+{
+  "fechaDesde": "2025-01-01",
+  "fechaHasta": "2025-04-01",
+  "cliente": "ACME",
+  "modoSimulacion": false
+}
+`
+
+---
+
+¿Te gustaría agregar soporte para paginación en la consulta GET, o que retornemos un PurgeToken (hash) para trazabilidad por lote? También podemos generar documentación Swagger en YAML si necesitas integrarlo desde el microservicio de purga con clientes generados 🧠📄
