@@ -1,0 +1,76 @@
+-----DELETE ----
+[TestClass]
+public class PurgeServiceTests
+{
+    private Mock<IUnitOfWork> _unitOfWorkMock;
+    private Mock<IGlobalReportRepository> _reportRepoMock;
+    private Mock<ILogger<PurgeService>> _loggerMock;
+    private PurgeService _service;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _unitOfWorkMock = new Mock<IUnitOfWork>();
+        _reportRepoMock = new Mock<IGlobalReportRepository>();
+        _loggerMock = new Mock<ILogger<PurgeService>>();
+
+        _unitOfWorkMock.Setup(u => u.GetGlobalReportRepository())
+                       .Returns(_reportRepoMock.Object);
+
+        _service = new PurgeService(_unitOfWorkMock.Object, _loggerMock.Object);
+    }
+
+    [TestMethod]
+    public async Task DeletePurgeRecordAsync_ShouldThrow_WhenTypeIsInvalid()
+    {
+        var request = new SearchPurgeRequest { TypePurge = "ARCHIVE" };
+
+        var response = await _service.DeletePurgeRecordAsync(request);
+
+        Assert.IsFalse(response.Success);
+        Assert.AreEqual("The purge type does not match the delete", response.Message);
+    }
+
+    [TestMethod]
+    public async Task DeletePurgeRecordAsync_ShouldThrow_WhenRecordNotFound()
+    {
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            Id = 1,
+            DateInsert = DateTime.UtcNow
+        };
+
+        _reportRepoMock.Setup(r => r.GetAsync(It.IsAny<Expression<Func<GlobalReport, bool>>>()))
+                       .ReturnsAsync((GlobalReport)null);
+
+        var response = await _service.DeletePurgeRecordAsync(request);
+
+        Assert.IsFalse(response.Success);
+        Assert.IsTrue(response.Message.Contains("Error GlobalReportId not found"));
+    }
+
+    [TestMethod]
+    public async Task DeletePurgeRecordAsync_ShouldReturnTrue_WhenSuccessful()
+    {
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            Id = 1,
+            DateInsert = DateTime.UtcNow
+        };
+
+        var report = new GlobalReport { GrId = 1, GrDateInsert = request.DateInsert };
+
+        _reportRepoMock.Setup(r => r.GetAsync(It.IsAny<Expression<Func<GlobalReport, bool>>>()))
+                       .ReturnsAsync(report);
+
+        _reportRepoMock.Setup(r => r.DeleteAsync(report)).ReturnsAsync(true);
+        _unitOfWorkMock.Setup(u => u.SaveChangeAsync()).Returns(Task.CompletedTask);
+
+        var response = await _service.DeletePurgeRecordAsync(request);
+
+        Assert.IsTrue(response.Success);
+        Assert.IsTrue(response.Data);
+    }
+}
