@@ -74,3 +74,101 @@ public class PurgeServiceTests
         Assert.IsTrue(response.Data);
     }
 }
+
+
+
+------List
+
+[TestClass]
+public class PurgeServiceQueryTests
+{
+    private Mock<IUnitOfWork> _unitOfWorkMock;
+    private Mock<IGlobalReportRepository> _reportRepoMock;
+    private Mock<ILogger<PurgeService>> _loggerMock;
+    private PurgeService _service;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _unitOfWorkMock = new Mock<IUnitOfWork>();
+        _reportRepoMock = new Mock<IGlobalReportRepository>();
+        _loggerMock = new Mock<ILogger<PurgeService>>();
+
+        _unitOfWorkMock.Setup(u => u.GetGlobalReportRepository())
+                       .Returns(_reportRepoMock.Object);
+
+        _service = new PurgeService(_unitOfWorkMock.Object, _loggerMock.Object);
+    }
+
+    [TestMethod]
+    public async Task GetPurgeRecordAsync_ShouldReturnError_WhenTypeIsInvalid()
+    {
+        var request = new SearchPurgeRequest { TypePurge = "ARCHIVE" };
+
+        var result = await _service.GetPurgeRecordAsync(request);
+
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("The purge type does not match the query", result.Message);
+    }
+
+    [TestMethod]
+    public async Task GetPurgeRecordAsync_ShouldReturnResults_WhenRecordsExist()
+    {
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            DateInsert = new DateTime(2024, 1, 1)
+        };
+
+        var reports = new List<GlobalReport>
+        {
+            new GlobalReport { GrId = 1, GrDateInsert = request.DateInsert },
+            new GlobalReport { GrId = 2, GrDateInsert = request.DateInsert }
+        };
+
+        _reportRepoMock.Setup(r => r.GetAllAsync(It.IsAny<Expression<Func<GlobalReport, bool>>>()))
+                       .ReturnsAsync(reports);
+
+        var result = await _service.GetPurgeRecordAsync(request);
+
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(2, result.Data.Count());
+    }
+
+    [TestMethod]
+    public async Task GetPurgeRecordAsync_ShouldReturnEmptyList_WhenNoRecordsFound()
+    {
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            DateInsert = new DateTime(2024, 1, 1)
+        };
+
+        _reportRepoMock.Setup(r => r.GetAllAsync(It.IsAny<Expression<Func<GlobalReport, bool>>>()))
+                       .ReturnsAsync(new List<GlobalReport>());
+
+        var result = await _service.GetPurgeRecordAsync(request);
+
+        Assert.IsTrue(result.Success);
+        Assert.IsNotNull(result.Data);
+        Assert.AreEqual(0, result.Data.Count());
+    }
+
+    [TestMethod]
+    public async Task GetPurgeRecordAsync_ShouldHandleException_Gracefully()
+    {
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            DateInsert = new DateTime(2024, 1, 1)
+        };
+
+        _reportRepoMock.Setup(r => r.GetAllAsync(It.IsAny<Expression<Func<GlobalReport, bool>>>()))
+                       .ThrowsAsync(new Exception("Database error"));
+
+        var result = await _service.GetPurgeRecordAsync(request);
+
+        Assert.IsFalse(result.Success);
+        Assert.IsTrue(result.Message.Contains("Error"));
+    }
+}
