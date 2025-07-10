@@ -370,3 +370,73 @@ public class DataPurgeJobTests
         _mockDataPurgeService.Verify(s => s.PurgeOldDataAsync(It.IsAny<DateTime>()), Times.Once);
     }
 }
+
+----4-----
+
+[TestClass]
+public class DataPurgeJobTests
+{
+    private Mock<IServiceProvider> _mockServiceProvider;
+    private Mock<IServiceScopeFactory> _mockScopeFactory;
+    private Mock<IServiceScope> _mockScope;
+    private Mock<IOptions<DataPurgeSettings>> _mockOptions;
+    private Mock<IDataPurgeService> _mockDataPurgeService;
+    private DataPurgeJob _job;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _mockServiceProvider = new Mock<IServiceProvider>();
+        _mockScopeFactory = new Mock<IServiceScopeFactory>();
+        _mockScope = new Mock<IServiceScope>();
+        _mockOptions = new Mock<IOptions<DataPurgeSettings>>();
+        _mockDataPurgeService = new Mock<IDataPurgeService>();
+
+        var settings = new DataPurgeSettings
+        {
+            PurgeThresholdDays = 30,
+            Tables = new List<DataPurgeTableConfig>
+            {
+                new DataPurgeTableConfig { Name = "TestTable", Enabled = true }
+            }
+        };
+        _mockOptions.Setup(o => o.Value).Returns(settings);
+
+        // Simular el IServiceScope
+        _mockScope.Setup(s => s.ServiceProvider).Returns(_mockServiceProvider.Object);
+        _mockScopeFactory.Setup(f => f.CreateScope()).Returns(_mockScope.Object);
+
+        // Registrar el factory en el ServiceProvider
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(IServiceScopeFactory)))
+            .Returns(_mockScopeFactory.Object);
+
+        // Simular GetService(typeof(IEnumerable<IDataPurgeService>))
+        var services = new List<IDataPurgeService> { _mockDataPurgeService.Object };
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(IEnumerable<IDataPurgeService>)))
+            .Returns(services);
+
+        // Simular GetService(typeof(IDataPurgeService)) como fallback
+        _mockServiceProvider
+            .Setup(sp => sp.GetService(typeof(IDataPurgeService)))
+            .Returns(_mockDataPurgeService.Object);
+
+        _mockDataPurgeService.Setup(s => s.TableName).Returns("TestTable");
+
+        _job = new DataPurgeJob(_mockServiceProvider.Object, _mockOptions.Object);
+    }
+
+    [TestMethod]
+    public async Task Execute_WhenTableIsEnabled_CallsPurgeOldDataAsync()
+    {
+        // Arrange
+        var context = Mock.Of<IJobExecutionContext>();
+
+        // Act
+        await _job.Execute(context);
+
+        // Assert
+        _mockDataPurgeService.Verify(s => s.PurgeOldDataAsync(It.IsAny<DateTime>()), Times.Once);
+    }
+}
