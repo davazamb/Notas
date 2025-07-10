@@ -1,0 +1,84 @@
+[TestClass]
+public class CaptureLoteServiceTests
+{
+    private Mock<ILogger<CaptureLoteService>> _loggerMock;
+    private Mock<IServiceProvider> _serviceProviderMock;
+    private Mock<IValidator<SearchPurgeRequest>> _validatorMock;
+    private Mock<IMapper> _mapperMock;
+    private Mock<IUnitOfWork> _unitOfWorkMock;
+    private Mock<ICaptureLoteRepository> _captureLoteRepoMock;
+    private Mock<IResponse> _responseMock;
+
+    private CaptureLoteService _service;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _loggerMock = new Mock<ILogger<CaptureLoteService>>();
+        _serviceProviderMock = new Mock<IServiceProvider>();
+        _validatorMock = new Mock<IValidator<SearchPurgeRequest>>();
+        _mapperMock = new Mock<IMapper>();
+        _unit Mock<IUnitOfWork>();
+        _captureLoteRepoMock = new Mock<ICaptureLoteRepository>();
+        _responseMock = new Mock<IResponse>();
+
+        _unitOfWorkMock.Setup(u => u.CaptureLoteRepository).Returns(_captureLoteRepoMock.Object);
+        _serviceProviderMock.Setup(s => s.GetService(typeof(IValidator<SearchPurgeRequest>)))
+                            .Returns(_validatorMock.Object);
+        _serviceProviderMock.Setup(s => s.GetRequiredService<IValidator<SearchPurgeRequest>>())
+                            .Returns(_validatorMock.Object);
+
+        _service = new CaptureLoteService(_unitOfWorkMock.Object, _mapperMock.Object, _responseMock.Object)
+        {
+            // Inyección manual de mocks privados si fuera necesario
+        };
+        typeof(CaptureLoteService)
+            .GetField("_logger", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.SetValue(_service, _loggerMock.Object);
+        typeof(CaptureLoteService)
+            .GetField("_serviceProvider", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?.SetValue(_service, _serviceProviderMock.Object);
+    }
+
+    [TestMethod]
+    public async Task GetListPurgeLoteImagesAsync_ShouldReturnSuccessResponse_WhenValidRequest()
+    {
+        // Arrange
+        var request = new SearchPurgeRequest();
+        var modelRequest = new ModelPurgeRequest();
+        var images = new List<CaptureLoteImage> { new CaptureLoteImage() };
+        var responseList = new List<GetCaptureLoteImageResponse> { new GetCaptureLoteImageResponse() };
+
+        _validatorMock.Setup(v => v.ValidateAndThrowAsync(request, default)).Returns(Task.CompletedTask);
+        _mapperMock.Setup(m => m.Map<ModelPurgeRequest>(request)).Returns(modelRequest);
+        _captureLoteRepoMock.Setup(r => r.GetAllByDatePurgeAsync(modelRequest)).ReturnsAsync(images);
+        _mapperMock.Setup(m => m.Map<List<GetCaptureLoteImageResponse>>(images)).Returns(responseList);
+        _responseMock.Setup(r => r.CreateResponse(true, responseList)).Returns(new BaseResponse<IEnumerable<GetCaptureLoteImageResponse>>(true, responseList));
+
+        // Act
+        var result = await _service.GetListPurgeLoteImagesAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        Assert.AreEqual(responseList, result.Data);
+    }
+
+    [TestMethod]
+    public async Task GetListPurgeLoteImagesAsync_ShouldReturnErrorResponse_WhenExceptionThrown()
+    {
+        // Arrange
+        var request = new SearchPurgeRequest();
+        var exceptionMessage = "Validation failed";
+
+        _validatorMock.Setup(v => v.ValidateAndThrowAsync(request, default)).ThrowsAsync(new Exception(exceptionMessage));
+        _responseMock.Setup(r => r.CreateResponse(false, exceptionMessage, It.IsAny<IEnumerable<GetCaptureLoteImageResponse>>()))
+                     .Returns(new BaseResponse<IEnumerable<GetCaptureLoteImageResponse>>(false, Enumerable.Empty<GetCaptureLoteImageResponse>(), exceptionMessage));
+
+        // Act
+        var result = await _service.GetListPurgeLoteImagesAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual(exceptionMessage, result.Message);
+    }
+}
