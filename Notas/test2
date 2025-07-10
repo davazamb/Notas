@@ -82,3 +82,133 @@ public class CaptureLoteServiceTests
         Assert.AreEqual(exceptionMessage, result.Message);
     }
 }
+
+---+++++
+
+[TestClass]
+public class CaptureLoteServiceTests
+{
+    private Mock<IUnitOfWork> _unitOfWorkMock;
+    private Mock<IMapper> _mapperMock;
+    private Mock<IResponse> _responseMock;
+    private Mock<ILogger<CaptureLoteService>> _loggerMock;
+    private Mock<IBusinessLoteService> _businessServiceMock;
+    private Mock<IServiceProvider> _serviceProviderMock;
+    private Mock<IValidator<SearchPurgeRequest>> _validatorMock;
+
+    private CaptureLoteService _service;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _unitOfWorkMock = new Mock<IUnitOfWork>();
+        _mapperMock = new Mock<IMapper>();
+        _responseMock = new Mock<IResponse>();
+        _loggerMock = new Mock<ILogger<CaptureLoteService>>();
+        _businessServiceMock = new Mock<IBusinessLoteService>();
+        _serviceProviderMock = new Mock<IServiceProvider>();
+        _validatorMock = new Mock<IValidator<SearchPurgeRequest>>();
+
+        _serviceProviderMock
+            .Setup(x => x.GetService(typeof(IValidator<SearchPurgeRequest>)))
+            .Returns(_validatorMock.Object);
+
+        _service = new CaptureLoteService(
+            _unitOfWorkMock.Object,
+            _mapperMock.Object,
+            _responseMock.Object,
+            _loggerMock.Object,
+            _businessServiceMock.Object,
+            _serviceProviderMock.Object
+        );
+    }
+
+    [TestMethod]
+    public async Task DeletePurgeRecordAsync_ValidRequest_DeletesRecords()
+    {
+        // Arrange
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            Id = 1,
+            DateInsert = DateTime.Today
+        };
+
+        _validatorMock
+            .Setup(v => v.ValidateAndThrowAsync(request, default))
+            .Returns(Task.CompletedTask);
+
+        var lote = new CaptureLote { ClId = 1, ClProcessDate = request.DateInsert };
+        var images = new List<CaptureImage>
+        {
+            new CaptureImage { ClId = 10, ClLote = 1 }
+        };
+        var pictures = new List<CaptureImagePicture>
+        {
+            new CaptureImagePicture { ClPictureId = 100, ClCaptureId = 10 }
+        };
+
+        _unitOfWorkMock.Setup(u => u.CaptureLoteRepository.GetAsync(It.IsAny<Func<CaptureLote, bool>>()))
+            .ReturnsAsync(lote);
+        _unitOfWorkMock.Setup(u => u.CaptureImageRepository.ListAsync(It.IsAny<Func<CaptureImage, bool>>()))
+            .ReturnsAsync(images);
+        _unitOfWorkMock.Setup(u => u.CaptureImagePictureRepository.ListAsync(It.IsAny<Func<CaptureImagePicture, bool>>()))
+            .ReturnsAsync(pictures);
+
+        // Act
+        var result = await _service.DeletePurgeRecordAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        _unitOfWorkMock.Verify(u => u.CaptureImagePictureRepository.DeleteAsync(It.IsAny<CaptureImagePicture>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.CaptureImageRepository.DeleteAsync(It.IsAny<CaptureImage>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.CaptureLoteRepository.DeleteAsync(It.IsAny<CaptureLote>()), Times.Once);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Once);
+    }
+
+    [TestMethod]
+    public async Task DeletePurgeRecordAsync_InvalidTypePurge_DoesNothing()
+    {
+        // Arrange
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "ARCHIVE",
+            Id = 1,
+            DateInsert = DateTime.Today
+        };
+
+        _validatorMock
+            .Setup(v => v.ValidateAndThrowAsync(request, default))
+            .Returns(Task.CompletedTask);
+
+        // Act
+        var result = await _service.DeletePurgeRecordAsync(request);
+
+        // Assert
+        Assert.IsTrue(result.Success);
+        _unitOfWorkMock.Verify(u => u.SaveChangesAsync(), Times.Never);
+    }
+
+    [TestMethod]
+    public async Task DeletePurgeRecordAsync_ThrowsException_ReturnsError()
+    {
+        // Arrange
+        var request = new SearchPurgeRequest
+        {
+            TypePurge = "DELETEPURGE",
+            Id = 1,
+            DateInsert = DateTime.Today
+        };
+
+        _validatorMock
+            .Setup(v => v.ValidateAndThrowAsync(request, default))
+            .ThrowsAsync(new ValidationException("Validation failed"));
+
+        // Act
+        var result = await _service.DeletePurgeRecordAsync(request);
+
+        // Assert
+        Assert.IsFalse(result.Success);
+        Assert.AreEqual("Validation failed", result.Message);
+    }
+}
