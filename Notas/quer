@@ -1,0 +1,22 @@
+var resultado = context.BaseA
+    .Where(cl => cl.Date < dateInsert && cl.ClCountry == "US")
+    .Join(
+        context.BaseB,
+        cl => cl.ClId,
+        ci => ci.CiLote,
+        (cl, ci) => new { cl, ci }
+    )
+    .Join(
+        context.BaseC,
+        temp => temp.ci.CiId,
+        cip => cip.CipCaptureId,
+        (temp, cip) => new
+        {
+            temp.cl,
+            temp.ci,
+            cip
+        }
+    )
+    .OrderByDescending(x => x.cl.SomeProperty) // Reemplaza "SomeProperty" por la propiedad correspondiente
+    .Take(100)
+    .ToList();
