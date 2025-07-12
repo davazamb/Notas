@@ -1,6 +1,13 @@
 var resultado = context.BaseB
-    .Where(b => b.BaseA.Date < dateInsert && b.BaseA.ClCountry == "US")
-    .SelectMany(b => b.BaseC, (b, c) => new { b, c })
-    .OrderByDescending(x => x.b.BaseA.SomeProperty) // Cambia SomeProperty por la propiedad real
+    .Include(b => b.BaseA)        // Asegura que BaseA esté disponible
+    .Include(b => b.BaseC)        // Asegura que la colección BaseC esté disponible
+    .Where(b => b.BaseA != null && b.BaseA.Date < dateInsert && b.BaseA.ClCountry == "US")
+    .SelectMany(b => b.BaseC, (b, c) => new
+    {
+        BaseA = b.BaseA,
+        BaseB = b,
+        BaseC = c
+    })
+    .OrderByDescending(x => x.BaseA.SomeProperty) // Reemplaza SomeProperty según tu orden real
     .Take(100)
     .ToList();
