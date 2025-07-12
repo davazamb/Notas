@@ -1,0 +1,19 @@
+var chequesConsolidado = await _context.Cheques
+    .Include(c => c.Lote)
+    .Include(c => c.Imagenes)
+    .Where(c => c.Lote.InsertedAt.Date == fecha.Date && c.Lote.Pais == pais)
+    .ToListAsync();
+
+var chequesAgrupados = chequesConsolidado
+    .GroupBy(c => c.Id)
+    .Select(g =>
+    {
+        var cheque = g.First();
+        cheque.Imagenes = g
+            .SelectMany(x => x.Imagenes)
+            .DistinctBy(i => i.Id)
+            .ToList(); // 🔧 Consolidar imágenes en memoria
+
+        return cheque;
+    })
+    .ToList();
