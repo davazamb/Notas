@@ -65,3 +65,44 @@ foreach (var image in captureImages)
         .Where(p => p.RcmCaptureImageId == image.Id)
         .ToList();
 }
+
+
+_---------
+
+
+public IEnumerable<RcmCaptureImage> GetConsolidatedCaptureImages(YourParameters parameters)
+{
+    // Consulta principal con CiLoteNavigation ya validada
+    var captureImages = _context.RcmCaptureImages
+        .Where(img =>
+            img.CiLoteNavigation != null &&
+            img.CiLoteNavigation.ClProcessDate < parameters.DateInsert &&
+            img.CiLoteNavigation.ClCountry == parameters.Country)
+        .Take(100)
+        .ToList();
+
+    // Filtrar solo los IDs que están relacionados
+    var imageIds = captureImages
+        .Select(img => img.Id)
+        .ToList();
+
+    // Consulta secundaria SOLO de imágenes relacionadas con los IDs anteriores
+    var pictures = _context.RcmCaptureImagePictures
+        .Where(pic => imageIds.Contains(pic.RcmCaptureImageId))
+        .ToList();
+
+    // Filtrar solo las imágenes que realmente tienen fotos relacionadas
+    var consolidatedImages = captureImages
+        .Where(img => pictures.Any(p => p.RcmCaptureImageId == img.Id))
+        .ToList();
+
+    // Agregar la colección de imágenes relacionadas a cada captura
+    foreach (var image in consolidatedImages)
+    {
+        image.RcmCaptureImagePictures = pictures
+            .Where(p => p.RcmCaptureImageId == image.Id)
+            .ToList();
+    }
+
+    return consolidatedImages.AsEnumerable();
+}
