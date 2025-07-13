@@ -38,3 +38,30 @@ var result = _context.RcmCaptureImages
     })
     .Take(100)
     .ToList();
+_----+----++-
+
+
+
+// Consulta principal de RcmCaptureImages
+var captureImages = _context.RcmCaptureImages
+    .Where(img =>
+        img.CiLoteNavigation != null &&
+        img.CiLoteNavigation.ClProcessDate < parameters.DateInsert &&
+        img.CiLoteNavigation.ClCountry == parameters.Country)
+    .Take(100)
+    .ToList();
+
+// Consulta secundaria de imágenes relacionadas
+var imageIds = captureImages.Select(img => img.Id).ToList();
+
+var pictures = _context.RcmCaptureImagePictures
+    .Where(pic => imageIds.Contains(pic.RcmCaptureImageId))
+    .ToList();
+
+// Agregación manual al modelo
+foreach (var image in captureImages)
+{
+    image.RcmCaptureImagePictures = pictures
+        .Where(p => p.RcmCaptureImageId == image.Id)
+        .ToList();
+}
