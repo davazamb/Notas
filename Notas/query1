@@ -17,3 +17,24 @@ var chequesAgrupados = chequesConsolidado
         return cheque;
     })
     .ToList();
+
+
+
+
+---------
+
+
+var result = _context.RcmCaptureImages
+    .Include(img => img.CiLoteNavigation)
+    .Include(img => img.RcmCaptureImagePictures)
+    .Where(img =>
+        img.CiLoteNavigation != null &&
+        img.CiLoteNavigation.ClProcessDate < parameters.DateInsert &&
+        img.CiLoteNavigation.ClCountry == parameters.Country)
+    .Select(img => new
+    {
+        CaptureImage = img,
+        CaptureImagePictures = img.RcmCaptureImagePictures.ToList()
+    })
+    .Take(100)
+    .ToList();
