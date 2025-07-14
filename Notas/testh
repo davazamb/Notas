@@ -30,3 +30,42 @@ public class ServicioTests
         _mockRepositorio.Verify(r => r.GetAllAsync(), Times.Once);
     }
 }
+
+
+--------
+
+
+
+[TestClass]
+public class ProductoServiceTests
+{
+    private Mock<IProductoRepository> _productoRepositoryMock;
+    private ProductoService _productoService;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _productoRepositoryMock = new Mock<IProductoRepository>();
+        _productoService = new ProductoService(_productoRepositoryMock.Object);
+    }
+
+    [TestMethod]
+    public async Task ObtenerPorIdAsync_ProductoExiste_RetornaProducto()
+    {
+        // Arrange
+        var productoId = 1;
+        var productoEsperado = new Producto { Id = productoId, Nombre = "Lápiz", Precio = 500 };
+
+        _productoRepositoryMock
+            .Setup(repo => repo.ObtenerPorIdAsync(productoId))
+            .ReturnsAsync(productoEsperado);
+
+        // Act
+        var resultado = await _productoService.ObtenerPorIdAsync(productoId);
+
+        // Assert
+        Assert.IsNotNull(resultado);
+        Assert.AreEqual(productoEsperado.Id, resultado.Id);
+        Assert.AreEqual(productoEsperado.Nombre, resultado.Nombre);
+    }
+}
