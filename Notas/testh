@@ -1,0 +1,32 @@
+[TestClass]
+public class ServicioTests
+{
+    private Mock<IRepositorio> _mockRepositorio;
+    private IServicio _servicio;
+
+    [TestInitialize]
+    public void Setup()
+    {
+        _mockRepositorio = new Mock<IRepositorio>();
+        _servicio = new Servicio(_mockRepositorio.Object);
+    }
+
+    [TestMethod]
+    public async Task GetAllAsync_DeberiaRetornarDatos()
+    {
+        // Arrange
+        var datosSimulados = new List<Entidad> { new Entidad { Id = 1, Nombre = "Ejemplo" } };
+        _mockRepositorio
+            .Setup(r => r.GetAllAsync())
+            .ReturnsAsync(datosSimulados);
+
+        // Act
+        var resultado = await _servicio.GetAllAsync();
+
+        // Assert
+        Assert.IsNotNull(resultado);
+        Assert.AreEqual(1, resultado.Count);
+        Assert.AreEqual("Ejemplo", resultado.First().Nombre);
+        _mockRepositorio.Verify(r => r.GetAllAsync(), Times.Once);
+    }
+}
