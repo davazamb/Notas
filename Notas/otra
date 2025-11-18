@@ -1,0 +1,78 @@
+Muy buena pregunta, David 👨‍💻. Si falla el POST de inserción, hay que pensar en dos niveles:  
+
+---
+
+🔎 Nivel 1: Fallo en la petición HTTP
+- Timeout / red de microservicio A → B: el request nunca llega o se corta.  
+- Respuesta 500 del microservicio B: el insert no se ejecutó.  
+- Respuesta 503 (deadlock reintentos agotados): el microservicio B intentó pero no logró insertar.  
+
+👉 En estos casos, el microservicio A debe manejar el error:
+- Retry con backoff: reintentar el POST unas cuantas veces.  
+- Log de fallos: guardar qué registros no se insertaron para reintentar más tarde.  
+- Idempotencia: si el mismo registro se envía dos veces, el microservicio B debe validar (Fecha, Factura) y no duplicar.
+
+---
+
+🔎 Nivel 2: Fallo dentro del microservicio B
+- Deadlock: ya lo controlamos con retry en el método InsertarEnBAsync.  
+- Excepción SQL distinta (ej. conexión caída, constraint, etc.): se captura y se devuelve un error HTTP.  
+- Transacción rollback: si algo falla dentro del insert, la transacción se revierte y no queda registro parcial.
+
+---
+
+🛠 Patrón recomendado
+
+En microservicio B (destino)
+- El endpoint /insertar devuelve:
+  - 200 OK con {codigo, estado="PENDIENTE"} si insertó.  
+  - 409 Conflict si ya existía (Fecha, Factura).  
+  - 503 Service Unavailable si falló por deadlock tras varios intentos.  
+  - 500 Internal Server Error para otros errores.
+
+En microservicio A (orquestador)
+- Al enviar los 10.000 registros:
+  - Si recibe 200 OK → registro insertado.  
+  - Si recibe 409 Conflict → ya estaba insertado, continuar.  
+  - Si recibe 503 o 500 → guardar en una lista de “pendientes” y reintentar más tarde.  
+
+Ejemplo de retry en A:
+`csharp
+foreach (var r in registros)
+{
+    int intentos = 0;
+    bool exito = false;
+
+    while (intentos < 3 && !exito)
+    {
+        var resp = await client.PostAsJsonAsync("http://microservicioB/insertar", r);
+        if (resp.IsSuccessStatusCode || resp.StatusCode == HttpStatusCode.Conflict)
+        {
+            exito = true; // insertado o ya existía
+        }
+        else
+        {
+            intentos++;
+            await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, intentos))); // backoff
+        }
+    }
+
+    if (!exito)
+    {
+        // loguear registro fallido para reprocesar después
+        pendientes.Add(r);
+    }
+}
+`
+
+---
+
+📌 Conclusión
+- Si falla el POST, no se inserta nada (la transacción se revierte).  
+- El microservicio A debe reintentar o registrar el fallo para no perder datos.  
+- El microservicio B debe ser idempotente (no duplicar si recibe el mismo registro varias veces).  
+- Solo cuando todos los inserts estén confirmados, se espera 5 minutos y se lanza el UPDATE masivo.  
+
+---
+
+👉 ¿Quieres que te arme un flujo completo con Quartz.NET donde el microservicio A reintenta los inserts fallidos y, al terminar todos, programa automáticamente el UPDATE en B y C?
