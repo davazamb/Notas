@@ -1,0 +1,100 @@
+Entendido, David 👨‍💻. Si no puedes crear un índice único en la tabla B, entonces toda la lógica de validación de duplicados debe quedar en tu microservicio, dentro de la transacción, y con reintentos ante deadlocks.  
+
+Aquí te muestro cómo quedaría un método único que hace todo el proceso para la tabla B sin depender de constraints en la base:
+
+---
+
+🛠 Método único con validación (Fecha, Factura) y MAX+1
+
+`csharp
+using System.Data;
+using Microsoft.Data.SqlClient;
+
+public class TransferService
+{
+    private readonly string _connB;
+
+    public TransferService(string connB)
+    {
+        _connB = connB;
+    }
+
+    public async Task InsertarEnBAsync(DateTime fecha, string factura, string campo1, string campo2)
+    {
+        int maxIntentos = 3;
+        int intento = 0;
+
+        while (true)
+        {
+            try
+            {
+                using var conn = new SqlConnection(_connB);
+                await conn.OpenAsync();
+
+                // Transacción SERIALIZABLE para evitar condiciones de carrera
+                using var tx = conn.BeginTransaction(IsolationLevel.Serializable);
+
+                // 1. Validar existencia por Fecha+Factura
+                var checkSql = "SELECT COUNT(1) FROM B WHERE Fecha = @Fecha AND Factura = @Factura";
+                using var checkCmd = new SqlCommand(checkSql, conn, tx);
+                checkCmd.Parameters.AddWithValue("@Fecha", fecha);
+                checkCmd.Parameters.AddWithValue("@Factura", factura);
+
+                var existe = (int)await checkCmd.ExecuteScalarAsync() > 0;
+                if (existe)
+                {
+                    tx.Commit();
+                    return; // Ya existe, no insertamos
+                }
+
+                // 2. Calcular MAX+1 del código
+                var maxSql = @"
+                    SELECT ISNULL(MAX(CAST(SUBSTRING(Codigo, 2, LEN(Codigo)) AS INT)), 0) + 1
+                    FROM B WITH (UPDLOCK, HOLDLOCK)";
+                using var maxCmd = new SqlCommand(maxSql, conn, tx);
+                var nuevoCodigoInt = (int)await maxCmd.ExecuteScalarAsync();
+                var nuevoCodigo = $"B{nuevoCodigoInt}";
+
+                // 3. Insertar
+                var insertSql = @"
+                    INSERT INTO B (Codigo, Fecha, Factura, Campo1, Campo2)
+                    VALUES (@Codigo, @Fecha, @Factura, @Campo1, @Campo2)";
+                using var insertCmd = new SqlCommand(insertSql, conn, tx);
+                insertCmd.Parameters.AddWithValue("@Codigo", nuevoCodigo);
+                insertCmd.Parameters.AddWithValue("@Fecha", fecha);
+                insertCmd.Parameters.AddWithValue("@Factura", factura);
+                insertCmd.Parameters.AddWithValue("@Campo1", campo1);
+                insertCmd.Parameters.AddWithValue("@Campo2", campo2);
+
+                await insertCmd.ExecuteNonQueryAsync();
+
+                tx.Commit();
+                break; // Éxito
+            }
+            catch (SqlException ex) when (ex.Number == 1205) // Deadlock
+            {
+                intento++;
+                if (intento >= maxIntentos)
+                    throw;
+
+                // Backoff exponencial antes de reintentar
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, intento)));
+            }
+        }
+    }
+}
+`
+
+---
+
+🔑 Puntos clave
+- Validación sin NOLOCK: se asegura que si otro proceso está insertando (Fecha, Factura), tu consulta lo verá correctamente.  
+- Transacción SERIALIZABLE + UPDLOCK/HOLDLOCK: evita que dos procesos calculen el mismo MAX+1.  
+- Reintento automático: si ocurre un deadlock (SqlException 1205), el método reintenta hasta 3 veces con backoff exponencial.  
+- Sin índice único: toda la lógica de unicidad se controla en el código.  
+
+---
+
+👉 Con este patrón, aunque no tengas índice único en la base, tu microservicio garantiza que no se inserten duplicados y que el MAX+1 sea consistente.  
+
+¿Quieres que te muestre cómo extender este método para procesar todos los registros del día desde la tabla A en un solo flujo?
