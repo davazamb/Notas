@@ -1,0 +1,125 @@
+Perfecto, David 👨‍💻. Lo que necesitas es que tu microservicio, después de realizar el INSERT en la tabla B, espere 5 minutos y luego ejecute un UPDATE en las tablas C y B para cambiar estados.  
+
+Esto se puede resolver de forma sencilla en .NET con Task.Delay dentro del mismo flujo, manteniendo la lógica en un solo método. Te muestro un ejemplo completo con ADO.NET y SqlCommand:
+
+---
+
+🛠 Ejemplo con espera de 5 minutos y update
+
+`csharp
+using System.Data;
+using Microsoft.Data.SqlClient;
+
+public class TransferService
+{
+    private readonly string _connB;
+    private readonly string _connC;
+
+    public TransferService(string connB, string connC)
+    {
+        _connB = connB;
+        _connC = connC;
+    }
+
+    public async Task InsertarYActualizarAsync(DateTime fecha, string factura, string campo1, string campo2)
+    {
+        int maxIntentos = 3;
+        int intento = 0;
+
+        while (true)
+        {
+            try
+            {
+                using var connB = new SqlConnection(_connB);
+                await connB.OpenAsync();
+
+                using var tx = connB.BeginTransaction(IsolationLevel.Serializable);
+
+                // 1. Validar existencia por Fecha+Factura
+                var checkSql = "SELECT COUNT(1) FROM B WHERE Fecha = @Fecha AND Factura = @Factura";
+                using var checkCmd = new SqlCommand(checkSql, connB, tx);
+                checkCmd.Parameters.AddWithValue("@Fecha", fecha);
+                checkCmd.Parameters.AddWithValue("@Factura", factura);
+
+                var existe = (int)await checkCmd.ExecuteScalarAsync() > 0;
+                if (existe)
+                {
+                    tx.Commit();
+                    return; // Ya existe, no insertamos
+                }
+
+                // 2. Calcular MAX+1 del código
+                var maxSql = @"
+                    SELECT ISNULL(MAX(CAST(SUBSTRING(Codigo, 2, LEN(Codigo)) AS INT)), 0) + 1
+                    FROM B WITH (UPDLOCK, HOLDLOCK)";
+                using var maxCmd = new SqlCommand(maxSql, connB, tx);
+                var nuevoCodigoInt = (int)await maxCmd.ExecuteScalarAsync();
+                var nuevoCodigo = $"B{nuevoCodigoInt}";
+
+                // 3. Insertar en B
+                var insertSql = @"
+                    INSERT INTO B (Codigo, Fecha, Factura, Campo1, Campo2, Estado)
+                    VALUES (@Codigo, @Fecha, @Factura, @Campo1, @Campo2, 'PENDIENTE')";
+                using var insertCmd = new SqlCommand(insertSql, connB, tx);
+                insertCmd.Parameters.AddWithValue("@Codigo", nuevoCodigo);
+                insertCmd.Parameters.AddWithValue("@Fecha", fecha);
+                insertCmd.Parameters.AddWithValue("@Factura", factura);
+                insertCmd.Parameters.AddWithValue("@Campo1", campo1);
+                insertCmd.Parameters.AddWithValue("@Campo2", campo2);
+
+                await insertCmd.ExecuteNonQueryAsync();
+
+                tx.Commit();
+
+                // 4. Esperar 5 minutos antes de actualizar estados
+                await Task.Delay(TimeSpan.FromMinutes(5));
+
+                // 5. Actualizar estados en B y C
+                await ActualizarEstadosAsync(nuevoCodigo, factura);
+                break; // Éxito
+            }
+            catch (SqlException ex) when (ex.Number == 1205) // Deadlock
+            {
+                intento++;
+                if (intento >= maxIntentos)
+                    throw;
+
+                await Task.Delay(TimeSpan.FromSeconds(Math.Pow(2, intento)));
+            }
+        }
+    }
+
+    private async Task ActualizarEstadosAsync(string codigoB, string factura)
+    {
+        // Update en tabla B
+        using var connB = new SqlConnection(_connB);
+        await connB.OpenAsync();
+        var updateB = "UPDATE B SET Estado = 'PROCESADO' WHERE Codigo = @Codigo";
+        using var cmdB = new SqlCommand(updateB, connB);
+        cmdB.Parameters.AddWithValue("@Codigo", codigoB);
+        await cmdB.ExecuteNonQueryAsync();
+
+        // Update en tabla C
+        using var connC = new SqlConnection(_connC);
+        await connC.OpenAsync();
+        var updateC = "UPDATE C SET Estado = 'PROCESADO' WHERE Factura = @Factura";
+        using var cmdC = new SqlCommand(updateC, connC);
+        cmdC.Parameters.AddWithValue("@Factura", factura);
+        await cmdC.ExecuteNonQueryAsync();
+    }
+}
+`
+
+---
+
+🔑 Puntos clave
+- Insert en B con validación (Fecha, Factura) y generación de MAX+1.  
+- Task.Delay(5 minutos) después del insert → el proceso queda en espera antes de actualizar.  
+- Update en B y C: se cambian los estados a "PROCESADO" (ajusta según tu negocio).  
+- Retry automático ante deadlocks en el insert.  
+
+---
+
+👉 Con este patrón, tu microservicio hace el insert, espera 5 minutos y luego actualiza estados en ambas tablas.  
+
+¿Quieres que te muestre cómo envolver este flujo en un BackgroundService para que se ejecute automáticamente en segundo plano sin bloquear tu API?
