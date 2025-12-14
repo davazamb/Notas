@@ -1,0 +1,87 @@
+using EFCore.BulkExtensions;
+using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
+
+public class PurgeService
+{
+    private readonly MyDbContext _context;
+
+    public PurgeService(MyDbContext context)
+    {
+        _context = context;
+    }
+
+    public async Task<bool> PurgeDataAsync(int batchSize = 1000)
+    {
+        DateTime purgeThreshold = DateTime.UtcNow.AddDays(-90);
+
+        using var transaction = await _context.Database.BeginTransactionAsync();
+
+        try
+        {
+            // === Selección de registros en A que cumplen la condición ===
+            var aBatch = await _context.A
+                .Where(a => a.FechaInsercion < purgeThreshold)
+                .Take(batchSize)
+                .ToListAsync();
+
+            if (!aBatch.Any())
+                return false; // No hay más registros para purgar
+
+            var aIds = aBatch.Select(a => a.IdA).ToList();
+
+            // === Dependientes en B ===
+            var bBatch = await _context.B.Where(b => aIds.Contains(b.IdA)).ToListAsync();
+            var bIds = bBatch.Select(b => b.IdB).ToList();
+
+            // === Dependientes en C y D ===
+            var cBatch = await _context.C.Where(c => bIds.Contains(c.IdB)).ToListAsync();
+            var dBatch = await _context.D.Where(d => bIds.Contains(d.IdB)).ToListAsync();
+
+            // === Dependientes en E ===
+            var eBatch = await _context.E.Where(e => aIds.Contains(e.IdA)).ToListAsync();
+
+            // === Backup en histórico con BulkInsert ===
+            await _context.BulkInsertAsync(aBatch.Select(a => new Ah { IdA = a.IdA, FechaInsercion = a.FechaInsercion }).ToList());
+            await _context.BulkInsertAsync(bBatch.Select(b => new Bh { IdB = b.IdB, IdA = b.IdA }).ToList());
+            await _context.BulkInsertAsync(cBatch.Select(c => new Ch { IdC = c.IdC, IdB = c.IdB }).ToList());
+            await _context.BulkInsertAsync(dBatch.Select(d => new Dh { IdD = d.IdD, IdB = d.IdB }).ToList());
+            await _context.BulkInsertAsync(eBatch.Select(e => new Eh { IdE = e.IdE, IdA = e.IdA }).ToList());
+
+            // === Auditoría ===
+            _context.PurgeLogs.Add(new PurgeLog
+            {
+                TableName = "A,B,C,D,E",
+                RecordsAffected = aBatch.Count + bBatch.Count + cBatch.Count + dBatch.Count + eBatch.Count,
+                PurgeDate = DateTime.UtcNow,
+                UserName = Environment.UserName
+            });
+            await _context.SaveChangesAsync();
+
+            // === Eliminación con BulkDelete en orden correcto ===
+            await _context.BulkDeleteAsync(cBatch);
+            await _context.BulkDeleteAsync(dBatch);
+            await _context.BulkDeleteAsync(eBatch);
+            await _context.BulkDeleteAsync(bBatch);
+            await _context.BulkDeleteAsync(aBatch);
+
+            await transaction.CommitAsync();
+
+            return true; // Se purgó un lote
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
+    }
+
+    public async Task RunPurgeJobAsync(int batchSize = 1000)
+    {
+        bool hasMore;
+        do
+        {
+            hasMore = await PurgeDataAsync(batchSize);
+        } while (hasMore);
+    }
+}
