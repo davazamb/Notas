@@ -1,0 +1,30 @@
+
+
+`
+Informe técnico – Cheques con estados distintos en aplicativos ARCGN/SIGCANGE
+
+1. Situación detectada:
+   - Se identificaron casos de cheques con estados diferentes entre RCM, PLB y SIC/SIG.
+   - El problema principal se relaciona con la lógica de sincronización y la expiración de cheques en ARCGN/SIGCANGE.
+   - Se evidenció un desfase entre número de referencia y número de cheque, generando inconsistencias.
+
+2. Análisis técnico:
+   - La variable de control de estado presenta riesgo de reversiones incorrectas.
+   - El proceso de expiración no está alineado con las reglas de negocio definidas.
+   - La falta de validación cruzada entre referencia y cheque provoca discrepancias en la trazabilidad.
+
+3. Acciones realizadas:
+   - Validación de registros en RCM y PLB para confirmar estados correctos.
+   - Revisión de la lógica de expiración en ARCGN/SIGCANGE.
+   - Propuesta de parche de datos para corregir cheques afectados.
+   - Ajuste de variables para evitar reversiones indebidas.
+
+4. Próximos pasos:
+   - Implementar el parche de datos en ambiente controlado.
+   - Ajustar la lógica de expiración para asegurar consistencia.
+   - Documentar el proceso de remediación y compartir con el equipo de operaciones.
+   - Monitorear el ciclo completo de sincronización para validar la solución.
+
+Conclusión:
+El incidente se origina en la falta de alineación entre la lógica de expiración y la validación de referencias. Se recomienda aplicar el parche de datos y ajustar las variables de control para garantizar la consistencia de estados en todos los aplicativos. El seguimiento continuo será clave para prevenir futuras discrepancias.
+`
