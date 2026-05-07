@@ -1,0 +1,101 @@
+Les comparto el análisis técnico realizado sobre las discrepancias detectadas en los estados de cheques en los aplicativos RCM/PLBE.
+
+Situación detectada:
+- Se identificaron inconsistencias entre RCM, PLB y SIC.
+- El problema principal se relaciona con la lógica de sincronización y expiración de cheques.
+- Se evidenció un desfase entre número de referencia y número de cheque.
+
+Análisis técnico:
+- La variable de control de estado de sincronización de cheques presenta riesgo de reversiones incorrectas.
+- El proceso de expiración no está alineado con las reglas de negocio.
+- La falta de validación cruzada entre referencia y cheque provoca discrepancias en la trazabilidad.
+
+Acciones realizadas:
+- Validación de registros en RCM y PLB.
+- Revisión de la lógica de expiración en RCM/SIGCANJE.
+- Propuesta de parche de datos para corregir cheques afectados.
+- Ajuste de variables para evitar reversiones indebidas.
+
+Próximos pasos:
+- Implementar el parche de datos en ambiente controlado.
+- Ajustar la lógica de expiración para asegurar consistencia.
+- Documentar el proceso de remediación y compartir con el equipo.
+- Monitorear el ciclo completo de sincronización.
+
+Conclusión:
+El incidente se origina en la falta de alineación entre la lógica de expiración y la validación de referencias. Se recomienda aplicar el parche de datos y ajustar las variables de control para garantizar la consistencia de estados en todos los aplicativos. El seguimiento continuo será clave para prevenir futuras discrepancias.
+
+-----------
+lys2
+--------------------------
+
+Les comparto el análisis técnico completo sobre las discrepancias detectadas en los estados de cheques en los aplicativos RCM/PLBE
+
+Situación detectada:
+- Cheques en estado "Pay" aparecen correctamente como "Pay" en RCM.
+- En PLB, esos mismos cheques figuran erróneamente como "066" en lugar de "070".
+- En SIG, los cheques aparecen como "3", lo cual es correcto, pero se detectaron inconsistencias en la sincronización con PLB.
+- Se identificó además un desfase entre número de referencia y número de cheque en el proceso de expiración en ARCGN/SIGCANGE.
+
+Análisis técnico:
+- La lógica de sincronización entre RCM, PLB y SIG no está alineada, generando discrepancias en los estados.
+- El proceso de expiración en ARCGN/SIGCANGE no valida correctamente la relación referencia-cheque, provocando errores en la trazabilidad.
+- La variable de control de estado presenta riesgo de revertir estados de manera incorrecta.
+- La falta de validación cruzada entre referencia y cheque genera inconsistencias que impactan directamente en la operación.
+
+Acciones realizadas:
+- Validación de registros en RCM para confirmar estados correctos.
+- Revisión de PLB para identificar cheques con código "066" y corregirlos a "070".
+- Confirmación de estados en SIG, donde el código "3" es correcto.
+- Revisión de la lógica de expiración en ARCGN/SIGCANGE.
+- Propuesta de parche de datos para corregir cheques afectados.
+- Ajuste de variables de control para evitar reversiones indebidas.
+
+Próximos pasos:
+- Implementar el parche de datos en ambiente controlado.
+- Ajustar la lógica de expiración en ARCGN/SIGCANGE para asegurar consistencia entre referencia y cheque.
+- Documentar el proceso de remediación y compartirlo con el equipo de operaciones.
+- Monitorear el ciclo completo de sincronización para validar la solución y prevenir futuras discrepancias.
+
+Conclusión:
+El incidente se origina en la falta de alineación entre la lógica de expiración y la validación de referencias, sumado a la discrepancia de códigos de estado entre PLB y RCM. Se recomienda aplicar el parche de datos y ajustar las variables de control para garantizar la consistencia de estados en todos los aplicativos. El seguimiento continuo será clave para prevenir futuras discrepancias y asegurar la confiabilidad del proceso.
+
+
+
+------------------------------------
+otro-
+-------------------------------
+
+Informe técnico – Discrepancias y soluciones en estados de cheques (RCM / PLB / SIC / ARCGN-SIGCANGE)
+
+1. Cheques no registrados:
+   - Se identificaron 11 cheques que no están en RCM, pero sí aparecen en PLB y en SIC.
+   - Acción: Coordinar con operaciones para validar si deben incluirse en RCM.
+   - Solución propuesta: Aplicar un DataPatch para registrar los cheques faltantes en RCM y asegurar la trazabilidad completa.
+
+2. Cheques en estado "Printed":
+   - Los cheques en estado "Printed" aparecen coherentes en todas las bases:
+     • RCM: estado “Printed”
+     • PLB: código 066
+     • SIC: código 3
+   - Conclusión: No se requieren acciones correctivas, ya que la representación es consistente.
+
+3. Cheques en estado "PAID":
+   - Los cheques en estado “PAID” (070) se están reseteando a “Printed” (066) por un problema de sincronización en PLB.
+   - Causa: La variable de control en el job update de RCM está siempre en “true”, lo que provoca la sobreescritura del estado.
+   - Solución propuesta: Ajustar la variable a “false” en el job update de RCM para que el estado 070 se mantenga y no se degrade a 066.
+
+4. Cheques en estado "ReadyToPrint" con expiración cumplida:
+   - Estos cheques fueron revertidos a “ReadyToPrint” por un DataPatch.
+   - Problema: Al tener una fecha de anulación previa, el proceso de expiración no se completó correctamente.
+   - Solución propuesta: Revisar la lógica de expiración para que contemple la fecha de anulación previa y permita completar el ciclo de expiración de manera correcta.
+
+5. Desfase en número de cheque y referencia:
+   - En RCM, dentro del job de update, se detectó un desfase entre el número de cheque y la referencia usada para la consulta con SIC.
+   - Consecuencia: Los cheques no se estaban expirando en RCM.
+   - Solución propuesta: Implementar correctivo en el job de update para que la consulta utilice la referencia correcta y los cheques puedan expirar adecuadamente.
+
+Conclusión general:
+Las discrepancias se originan en tres frentes principales: cheques no registrados, lógica de sincronización que degrada estados, y errores en la lógica de expiración por desfase de referencia. Las soluciones propuestas incluyen aplicar un DataPatch, ajustar variables de control en el job update, y corregir la lógica de expiración y consulta de referencias. Con estas medidas, se asegura la consistencia de estados en RCM, PLB y SIC, y se previene la repetición de estas discrepancias.
+
+
